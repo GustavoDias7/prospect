@@ -1,0 +1,35 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Facebook</title>
+    <link rel="stylesheet" href="{% static 'css/index.css' %}" />
+  </head>
+  <body>
+    <section>
+        <div class="container md:container">
+            <h1 class="text-3xl text-mb-4">Hello, World!</h1>
+
+            <form action="{% url "facebook" %}" method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <h2 class="text-mb-4">
+                    <label for="facebook-pages">
+                        Results of Facebook pages
+                        <input type="file" name="facebook_pages" id="facebook-pages">
+                    </label>
+                </h2>
+                <button class="gn-button pm-button">Upload file</button>
+            </form>
+
+            {% for page in fb_pages %}
+            <p>
+              <a href="{{page.get_facebook}}" target="_blank">{{page.get_facebook}}</a>
+            </p>
+            {% endfor %}
+        </div>
+    </section>
+  </body>
+</html>
