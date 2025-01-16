@@ -1,0 +1,18 @@
+{% extends 'admin/base_site.html' %} {% load static %} {% block content %}
+<div>
+  <form method="POST" id="csv-form" enctype="multipart/form-data">
+    {% csrf_token %}
+    <label for="facebook_pages">Select a .html file:</label>
+    <input type="file" name="facebook_pages" />
+    <br />
+    <div class="submit-row">
+      <input type="submit" value="Upload .txt">
+    </div>
+  </form>
+
+  <br />
+  {% for file in files %}
+    <p>{{file}}</p>
+  {% endfor %}
+</div>
+{% endblock %}

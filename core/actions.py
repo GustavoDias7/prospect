@@ -21,7 +21,7 @@ def get_datas(modeladmin, request, queryset):
             soup = BeautifulSoup(html_source, "html.parser")
             body = soup.get_text(separator="|")
             
-            print("body:", body)
+            # print("body:", body)
             
             position = body.find("Advertising") # to remove other invalid links to website field
             body = body[:position]
@@ -86,7 +86,7 @@ def get_datas(modeladmin, request, queryset):
             messages.error(request, str(e))
     
     driver.close()
-    
+
 @admin.action(description="Disqualify contact", permissions=["change"])
 def disqualify(modeladmin, request, queryset):
     queryset.update(qualified=False)
