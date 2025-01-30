@@ -116,7 +116,86 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         else:
             return "-"
         
-
 @admin.register(models.Decider)
 class DeciderAdmin(admin.ModelAdmin):
     list_display = ["id", "name", "phone", "email", "instagram"]
+    
+@admin.register(models.InstagramContact)
+class InstagramContactAdmin(admin.ModelAdmin):
+    list_filter = ["qualified", "contacted", "archived"]
+    list_display = ["id", "name_", "phone_", "website_", "last_post_", "menu"]
+    actions = [
+        actions.get_instagram_data, 
+        actions.disqualify, 
+        actions.qualify, 
+        actions.contacted, 
+        actions.archive,
+        actions.has_menu,
+        actions.not_menu,
+    ]
+    search_fields = ["id", "username", "website", "phone"]
+    
+    def get_form(self, request, obj=None, **kwargs):
+        help_texts = { "help_texts": {} }
+        if obj:
+            if obj.name:
+                help_text = f"https://duckduckgo.com/?t=ffab&q={obj.name}+site%3Ainstagram.com&ia=web"
+                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                help_texts["help_texts"].update({"name": mark_safe(html)})
+            
+            if obj.phone:
+                help_text = obj.get_whatsapp_link()
+                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                help_texts["help_texts"].update({"phone": mark_safe(html)}) 
+                
+            if obj.username:
+                help_text = obj.get_instagram_link()
+                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                help_texts["help_texts"].update({"username": mark_safe(html)}) 
+                
+            kwargs.update(help_texts)
+                
+        return super().get_form(request, obj, **kwargs)
+    
+    @admin.display(description='instagram')
+    def name_(self, obj):
+        if obj.name:
+            inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
+            html = f'<a href="{obj.get_instagram_link()}" target="_blannk">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+        
+    @admin.display(description='last post')
+    def last_post_(self, obj):
+        if obj.last_post:
+            return obj.last_post.strftime("%b. %d, %Y")
+        else:
+            return "-"
+
+    @admin.display(description='website')
+    def website_(self, obj):
+        if obj.website:
+            leng = 30
+            inner_text = obj.website[0:leng - 1] if len(obj.website) > leng else obj.website
+            html = f'<a href="{obj.website}" target="_blannk">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+        
+    @admin.display(description='phone')
+    def phone_(self, obj):
+        if obj.phone:
+            if len(obj.phone) >= 9: 
+                link_number = obj.get_whatsapp_link()
+                whatsapp = f'<a href="{link_number}" target="_blannk">{obj.phone}</a>'
+                return mark_safe(whatsapp)
+            else: 
+                return obj.phone
+        else:
+            return "-"
+        
+@admin.register(models.Website)
+class WebsiteAdmin(admin.ModelAdmin):
+    list_filter = ["qualified"]
+    list_display = ["id", "website", "qualified", "whatsapp", "linktree"]

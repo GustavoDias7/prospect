@@ -4,6 +4,14 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 import re
 import time
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+import urllib.parse
+import requests
+from prospect.utils import (get_phone, has_string_in_list)
+from . import models
+from datetime import datetime, timedelta
+from django.utils import timezone
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -90,3 +98,175 @@ def get_datas(modeladmin, request, queryset):
 @admin.action(description="Disqualify contact", permissions=["change"])
 def disqualify(modeladmin, request, queryset):
     queryset.update(qualified=False)
+                
+@admin.action(description="Qualify contact", permissions=["change"])
+def qualify(modeladmin, request, queryset):
+    queryset.update(qualified=True)
+                
+@admin.action(description="It was contacted", permissions=["change"])
+def contacted(modeladmin, request, queryset):
+    queryset.update(contacted=True)
+                
+@admin.action(description="Archive contact", permissions=["change"])
+def archive(modeladmin, request, queryset):
+    queryset.update(archived=True)
+    
+@admin.action(description="Has menu", permissions=["change"])
+def has_menu(modeladmin, request, queryset):
+    queryset.update(menu=True)
+    
+@admin.action(description="Has no menu", permissions=["change"])
+def not_menu(modeladmin, request, queryset):
+    queryset.update(menu=False)
+
+@admin.action(description="Get data from the Instagram page", permissions=["change"])
+def get_instagram_data(modeladmin, request, queryset):
+    options = Options()
+    # options.add_argument("--headless")
+    driver = webdriver.Firefox(options=options)
+    driver.get("https://www.instagram.com/")
+    
+    time.sleep(5)
+    
+    form = driver.find_element(By.ID, "loginForm")
+    username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
+    password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+    
+    username.send_keys("saudavel_por_inteiro")
+    password.send_keys("maissaude")
+    form.submit()
+            
+    time.sleep(10)
+    for query in queryset:
+            
+        driver.get(query.get_instagram_link())
+            
+        time.sleep(10)
+    
+        # name
+        title = driver.find_element(By.TAG_NAME, "title")
+        if title:
+            title = title.get_attribute("innerText")
+            
+            if "@" in title:
+                name = re.search(r"(.*?)\s?\(@", title)
+                if name:
+                    query.name = name.group(1)
+                    
+        role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+        if role_buttons:
+            # open "more" button from bio
+            for role_button in role_buttons:
+                outer_text = role_button.get_attribute("outerText")
+                if not outer_text: continue
+                if "more" in outer_text:
+                    role_button.click()
+                    break
+            
+            # get number from bio
+            for role_button in role_buttons:
+                try:
+                    # more button does not exist -> StaleElementReferenceException
+                    outer_text = role_button.get_attribute("outerText")
+                except:
+                    continue
+                
+                if not outer_text: continue
+                
+                phone_number = get_phone(outer_text)
+                if phone_number:
+                    query.phone = phone_number
+                    break
+        
+        highlights = driver.find_elements(By.CSS_SELECTOR, "section ul > li [role='button']")
+        if highlights:
+            for highlight in highlights:
+                try:
+                    outer_text = highlight.get_attribute("outerText")
+                except:
+                    continue
+                
+                if not outer_text: continue
+                
+                menu_terms = ["catálogo", "cardápio", "menu", "pratos", "pizzas"]
+                has_menu_in_highlight = has_string_in_list(outer_text, menu_terms)
+                if has_menu_in_highlight:
+                    query.menu = True
+                    break
+                    
+        # open link modals
+        buttons = driver.find_elements(By.TAG_NAME, "button")
+        if buttons:
+            for button in buttons:
+                outer_text = button.get_attribute("outerText")
+                if " + " in outer_text:
+                    button.click()
+                    break
+        
+        # website
+        links_to_redirect = driver.find_elements(By.CSS_SELECTOR, "a[href*='l.instagram.com']")
+        if links_to_redirect:
+            websites = models.Website.objects.all()
+            for link in links_to_redirect:
+                href = urllib.parse.urlparse(link.get_attribute("href"))
+                query_params = urllib.parse.parse_qs(href.query)
+                u_value = query_params.get('u', [None])[0]
+                website = urllib.parse.unquote(u_value).split('?')[0]
+                    
+                for ws in websites:
+                    if ws.website in website:
+                        if ws.whatsapp:
+                            whatsapp_number = get_phone(u_value)
+                            if whatsapp_number and len(whatsapp_number) >= 8:
+                                query.phone = whatsapp_number
+                        elif ws.qualified == False:
+                            query.qualified = False
+                            query.website = website
+                        elif ws.linktree:
+                            driver.execute_script("window.open('');")
+                            driver.switch_to.window(driver.window_handles[1]) 
+                            driver.get(website)
+                            time.sleep(3)
+                            
+                            linktree_links = driver.find_elements(By.CSS_SELECTOR, "a")
+                            for lt_link in linktree_links:
+                                lt_href = lt_link.get_attribute("href")
+                                
+                                for ws2 in websites:
+                                    if ws2.website in lt_href:
+                                        if ws2.whatsapp:
+                                            whatsapp_number = get_phone(u_value)
+                                            if whatsapp_number and len(whatsapp_number) >= 8:
+                                                query.phone = whatsapp_number
+                                        elif ws2.qualified == False:
+                                            query.qualified = False
+                                            query.website = website
+                                            
+                            driver.close()
+                            driver.switch_to.window(driver.window_handles[0]) 
+                    else:
+                        query.website = website
+        
+        if query.qualified != False:
+            posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div a")
+            if posts:
+                for post in posts:
+                    text_post = post.get_attribute("text")
+                    if "Pinned" not in text_post:
+                        driver.execute_script("arguments[0].click();", post)
+                        js_last_post_element = driver.find_element(By.CSS_SELECTOR, "a > span > time")
+                        if js_last_post_element:
+                            js_last_post = js_last_post_element.get_attribute("dateTime")
+                            last_post = datetime.fromisoformat(js_last_post.replace("Z", "+00:00"))
+                            query.last_post = last_post
+                            limit_datetime = timezone.now() - timedelta(days=365)
+                            if last_post <= limit_datetime:
+                                query.qualified = False
+                        break
+        
+        # catálogo, cardápio, menu, pratos
+        
+        query.save()
+    
+    driver.close()
+    
