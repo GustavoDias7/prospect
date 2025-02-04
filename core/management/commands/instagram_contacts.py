@@ -24,26 +24,25 @@ class Command(BaseCommand):
         time.sleep(3)
 
         continue_script = "y"
-        while continue_script == "y":
-            if continue_script.lower() == "y":
+        while continue_script.lower() == "y":
+            links = driver.find_elements(By.CLASS_NAME, 'result-link')
+            contacts = []
+            for link in links:
+                href = urllib.parse.urlparse(link.get_attribute("href"))
+                contact = InstagramContact()
+                username = href.path.split("/")[1]
+                if username in ("reel", "tv", "c", "p", "stories"): continue
+                contact.username = username
+                contacts.append(contact)
                 
-                links = driver.find_elements(By.CLASS_NAME, 'result-link')
-                contacts = []
-                for link in links:
-                    href = urllib.parse.urlparse(link.get_attribute("href"))
-                    contact = InstagramContact()
-                    contact.username = href.path.split("/")[1]
-                    contacts.append(contact)
+            InstagramContact.objects.bulk_create(contacts, ignore_conflicts=True)
                 
-                InstagramContact.objects.bulk_create(contacts, ignore_conflicts=True)
-                    
-                next_form = driver.find_element(By.CLASS_NAME, "next_form")
-                next_form.submit()
+            next_form = driver.find_element(By.CLASS_NAME, "next_form")
+            next_form.submit()
 
-                time.sleep(3)
-            else:
-                driver.close()
-                break
+            time.sleep(3)
             
             continue_script = input("Continue script? [y/n] ")
+        
+        driver.close()
 

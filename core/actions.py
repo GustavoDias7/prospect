@@ -17,6 +17,7 @@ from django.utils import timezone
 def get_datas(modeladmin, request, queryset):
     options = Options()
     # options.add_argument("--headless")
+    options.add_argument("start-maximized")
     driver = webdriver.Firefox(options=options)
     
     for query in queryset:
@@ -212,61 +213,104 @@ def get_instagram_data(modeladmin, request, queryset):
                 query_params = urllib.parse.parse_qs(href.query)
                 u_value = query_params.get('u', [None])[0]
                 website = urllib.parse.unquote(u_value).split('?')[0]
-                    
-                for ws in websites:
-                    if ws.website in website:
-                        if ws.whatsapp:
-                            whatsapp_number = get_phone(u_value)
-                            if whatsapp_number and len(whatsapp_number) >= 8:
-                                query.phone = whatsapp_number
-                        elif ws.qualified == False:
-                            query.qualified = False
-                            query.website = website
-                        elif ws.linktree:
-                            driver.execute_script("window.open('');")
-                            driver.switch_to.window(driver.window_handles[1]) 
-                            driver.get(website)
-                            time.sleep(3)
-                            
-                            linktree_links = driver.find_elements(By.CSS_SELECTOR, "a")
-                            for lt_link in linktree_links:
-                                lt_href = lt_link.get_attribute("href")
-                                
-                                for ws2 in websites:
-                                    if ws2.website in lt_href:
-                                        if ws2.whatsapp:
-                                            whatsapp_number = get_phone(u_value)
-                                            if whatsapp_number and len(whatsapp_number) >= 8:
-                                                query.phone = whatsapp_number
-                                        elif ws2.qualified == False:
-                                            query.qualified = False
-                                            query.website = website
-                                            
-                            driver.close()
-                            driver.switch_to.window(driver.window_handles[0]) 
-                    else:
-                        query.website = website
-        
-        if query.qualified != False:
-            posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div a")
-            if posts:
-                for post in posts:
-                    text_post = post.get_attribute("text")
-                    if "Pinned" not in text_post:
-                        driver.execute_script("arguments[0].click();", post)
-                        js_last_post_element = driver.find_element(By.CSS_SELECTOR, "a > span > time")
-                        if js_last_post_element:
-                            js_last_post = js_last_post_element.get_attribute("dateTime")
-                            last_post = datetime.fromisoformat(js_last_post.replace("Z", "+00:00"))
-                            query.last_post = last_post
-                            limit_datetime = timezone.now() - timedelta(days=365)
-                            if last_post <= limit_datetime:
+                query.website = website
+                
+                stop_bitly = False
+                if "bit.ly" in website:
+                    response = requests.get(query.website)
+                    redirect_website = response.url
+                    for ws in websites:
+                        if ws.website in redirect_website:
+                            if ws.whatsapp:
+                                whatsapp_number = get_phone(redirect_website)
+                                if whatsapp_number and len(whatsapp_number) >= 8:
+                                    query.phone = whatsapp_number
+                                    query.website = None
+                                    stop_bitly = True
+                            elif ws.qualified == False:
                                 query.qualified = False
-                        break
+                                query.website = redirect_website
+                                stop_bitly = True
+                
+                if not stop_bitly:
+                    for ws in websites:
+                        if website and ws.website in website:
+                            if ws.whatsapp:
+                                whatsapp_number = get_phone(u_value)
+                                if whatsapp_number and len(whatsapp_number) >= 8:
+                                    query.phone = whatsapp_number
+                                    query.website = None
+                            elif ws.qualified == False:
+                                query.qualified = False
+                            elif ws.linktree:
+                                driver.execute_script("window.open('');")
+                                driver.switch_to.window(driver.window_handles[1]) 
+                                driver.get(website)
+                                time.sleep(3)
+                                
+                                linktree_links = driver.find_elements(By.CSS_SELECTOR, "a")
+                                for lt_link in linktree_links:
+                                    lt_href = lt_link.get_attribute("href")
+                                    
+                                    for ws2 in websites:
+                                        if lt_href and ws2.website in lt_href:
+                                            if ws2.whatsapp:
+                                                whatsapp_number = get_phone(u_value)
+                                                if whatsapp_number and len(whatsapp_number) >= 8:
+                                                    query.phone = whatsapp_number
+                                                    query.website = None
+                                            elif ws2.qualified == False:
+                                                query.qualified = False
+                                                query.website = website
+                                                        
+                                driver.close()
+                                driver.switch_to.window(driver.window_handles[0])
+                    
         
-        # catálogo, cardápio, menu, pratos
+        posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div a")
+        if posts:
+            for post in posts:
+                text_post = post.get_attribute("text")
+                if "Pinned" not in text_post:
+                    driver.execute_script("arguments[0].click();", post)
+                    
+                    try:
+                        js_last_post_element = driver.find_element(By.CSS_SELECTOR, "a > span > time")
+                    except:
+                        js_last_post_element = None
+                        
+                    if js_last_post_element:
+                        js_last_post = js_last_post_element.get_attribute("dateTime")
+                        last_post = datetime.fromisoformat(js_last_post.replace("Z", "+00:00"))
+                        query.last_post = last_post
+                        limit_datetime = timezone.now() - timedelta(days=365)
+                        if last_post <= limit_datetime:
+                            query.qualified = False
+                    break
         
         query.save()
     
     driver.close()
+
+
+@admin.action(description="Handle bitly and linktree urls", permissions=["change"])
+def handle_bitly_linktree(modeladmin, request, queryset):
+    # options = Options()
+    # driver = webdriver.Firefox(options=options)
+    websites = models.Website.objects.all()
     
+    for query in queryset:
+        if query.website:
+            response = requests.get(query.website)
+            website = response.url
+            for ws in websites:
+                if ws.website in website:
+                    if ws.whatsapp:
+                        whatsapp_number = get_phone(website)
+                        if whatsapp_number and len(whatsapp_number) >= 8:
+                            query.phone = whatsapp_number
+                    elif ws.qualified == False:
+                        query.website = website
+    
+    # query.save()
+        

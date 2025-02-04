@@ -50,9 +50,9 @@ class InstagramContact(models.Model):
     address = models.CharField(max_length=200, null=True, blank=True)
     qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
     decider = models.OneToOneField(to="Decider", on_delete=models.SET_NULL, null=True, blank=True)
-    contacted = models.BooleanField()
+    contacted = models.BooleanField(default=False)
     last_post = models.DateTimeField(default=None, null=True, blank=True)
-    archived = models.BooleanField()
+    archived = models.BooleanField(default=False)
     menu = models.BooleanField(default=None, null=True, blank=True)
     
     def get_instagram_link(self):

@@ -29,7 +29,11 @@ def get_phone(value: str):
     
     phones = [
         re.search(r"\d{13}", value), # '9999999999999'
+        re.search(r"\d{12}", value), # '999999999999'
         re.search(r"\(\d{2}\) \d{5}-\d{4}", value), # '(99) 99999-9999'
+        re.search(r"\(\d{2}\) \d{4}-\d{4}", value), # '(99) 9999-9999'
+        re.search(r"\(\d{2}\)\d{4}-\d{4}", value), # '(99)9999-9999'
+        re.search(r"\(\d{2}\)\d{4}\d{4}", value), # '(99)99999999'
         re.search(r"\(\d{2}\) \d{5}-\d{4}", value), # '(99)999999999'
         re.search(r"\d{2} \d{5}-\d{4}", value), # '99 99999-9999'
         re.search(r"\(\d{2}\) \d{9}", value), # '(99) 999999999'

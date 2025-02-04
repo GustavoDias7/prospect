@@ -123,7 +123,7 @@ class DeciderAdmin(admin.ModelAdmin):
 @admin.register(models.InstagramContact)
 class InstagramContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived"]
-    list_display = ["id", "name_", "phone_", "website_", "last_post_", "menu"]
+    list_display = ["id", "name_", "phone_", "website_", "last_post_", "decider__name", "menu"]
     actions = [
         actions.get_instagram_data, 
         actions.disqualify, 
@@ -132,6 +132,7 @@ class InstagramContactAdmin(admin.ModelAdmin):
         actions.archive,
         actions.has_menu,
         actions.not_menu,
+        actions.handle_bitly_linktree
     ]
     search_fields = ["id", "username", "website", "phone"]
     
@@ -139,7 +140,7 @@ class InstagramContactAdmin(admin.ModelAdmin):
         help_texts = { "help_texts": {} }
         if obj:
             if obj.name:
-                help_text = f"https://duckduckgo.com/?t=ffab&q={obj.name}+site%3Ainstagram.com&ia=web"
+                help_text = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
                 html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
@@ -161,6 +162,10 @@ class InstagramContactAdmin(admin.ModelAdmin):
     def name_(self, obj):
         if obj.name:
             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
+            html = f'<a href="{obj.get_instagram_link()}" target="_blannk">{inner_text}</a>'
+            return mark_safe(html)
+        elif obj.username:
+            inner_text = obj.username
             html = f'<a href="{obj.get_instagram_link()}" target="_blannk">{inner_text}</a>'
             return mark_safe(html)
         else:
@@ -186,9 +191,20 @@ class InstagramContactAdmin(admin.ModelAdmin):
     @admin.display(description='phone')
     def phone_(self, obj):
         if obj.phone:
-            if len(obj.phone) >= 9: 
+            if len(obj.phone) == 13: 
                 link_number = obj.get_whatsapp_link()
-                whatsapp = f'<a href="{link_number}" target="_blannk">{obj.phone}</a>'
+                inner_text = f"+{obj.phone[0:2]} ({obj.phone[2:4]}) {obj.phone[4]} {obj.phone[5:9]}-{obj.phone[9:13]}"
+                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            if len(obj.phone) == 11 and int(obj.phone[2]) == 9: 
+                link_number = obj.get_whatsapp_link()
+                inner_text = f"({obj.phone[0:2]}) {obj.phone[2]} {obj.phone[3:7]}-{obj.phone[7:11]}"
+                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            elif len(obj.phone) == 9 and int(obj.phone[0]) == 9: 
+                link_number = obj.get_whatsapp_link()
+                inner_text = f"{obj.phone[0:5]}-{obj.phone[5:9]}"
+                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
                 return mark_safe(whatsapp)
             else: 
                 return obj.phone
