@@ -12,6 +12,15 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import os
+from environs import Env
+
+env = Env()
+env.read_env()
+
+LINKEDIN_USERNAME = env('LINKEDIN_USERNAME')
+LINKEDIN_PASSWORD = env('LINKEDIN_PASSWORD')
+INSTAGRAM_USERNAME = env('INSTAGRAM_USERNAME')
+INSTAGRAM_PASSWORD = env('INSTAGRAM_PASSWORD')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

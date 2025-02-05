@@ -12,6 +12,7 @@ from prospect.utils import (get_phone, has_string_in_list)
 from . import models
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.conf import settings
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -119,6 +120,11 @@ def has_menu(modeladmin, request, queryset):
 @admin.action(description="Has no menu", permissions=["change"])
 def not_menu(modeladmin, request, queryset):
     queryset.update(menu=False)
+    
+@admin.action(description="Open Selenium", permissions=["change"])
+def open_selenium(modeladmin, request, queryset):
+    options = Options()
+    driver = webdriver.Firefox(options=options)
 
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset):
@@ -133,8 +139,8 @@ def get_instagram_data(modeladmin, request, queryset):
     username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
     password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
     
-    username.send_keys("saudavel_por_inteiro")
-    password.send_keys("maissaude")
+    username.send_keys(settings.INSTAGRAM_USERNAME)
+    password.send_keys(settings.INSTAGRAM_PASSWORD)
     form.submit()
             
     time.sleep(10)

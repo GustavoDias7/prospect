@@ -3,9 +3,11 @@ from django.shortcuts import render
 from . import models, actions
 from django.utils.safestring import mark_safe
 from import_export.admin import ImportExportModelAdmin
+from django.core.exceptions import ObjectDoesNotExist
 from bs4 import BeautifulSoup
 import urllib.parse
 from . import models
+from django.template import Context, Template
 
 @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -215,3 +217,50 @@ class InstagramContactAdmin(admin.ModelAdmin):
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]
     list_display = ["id", "website", "qualified", "whatsapp", "linktree"]
+
+@admin.register(models.Vacancy)
+class VacancyAdmin(admin.ModelAdmin):
+    list_filter = ["archived", "contacted"]
+    list_display = ["name", "link", "description", "category", "company"]
+    autocomplete_fields = ["category", "company", "template", "curriculum", "level"]
+    change_form_template = 'admin/vacancy_change_form.html'
+    actions = [actions.archive, actions.contacted, actions.open_selenium]
+    
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        
+        try:
+            vacancy = models.Vacancy.objects.get(id=object_id)
+            template = Template(vacancy.template.message)
+            context = Context({'vacancy': vacancy})
+            rendered_content = template.render(context)
+            extra_context["template"] = rendered_content
+        except ObjectDoesNotExist:
+            extra_context["template"] = None
+        
+        return super().change_view(
+            request,
+            object_id,
+            form_url,
+            extra_context=extra_context,
+        )
+
+@admin.register(models.Company)
+class CompanyAdmin(admin.ModelAdmin):
+    search_fields = ["name"]
+
+@admin.register(models.VacancyCategory)
+class VacancyCategoryAdmin(admin.ModelAdmin):
+    search_fields = ["name"]
+    
+@admin.register(models.Template)
+class TemplateAdmin(admin.ModelAdmin):
+    search_fields = ["name"]
+    
+@admin.register(models.Curriculum)
+class CurriculumAdmin(admin.ModelAdmin):
+    search_fields = ["name"]
+
+@admin.register(models.VacancyLevel)
+class VacancyLevelAdmin(admin.ModelAdmin):
+    search_fields = ["name"]
