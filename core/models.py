@@ -44,7 +44,8 @@ class Decider(models.Model):
 class InstagramContact(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     username = models.CharField(max_length=30, unique=True, null=True, blank=True)
-    phone = models.CharField(max_length=13, null=True, blank=True)
+    cellphone = models.CharField(max_length=13, null=True, blank=True)
+    telephone = models.CharField(max_length=12, null=True, blank=True)
     website = models.URLField(max_length=200, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
@@ -60,7 +61,7 @@ class InstagramContact(models.Model):
     
     def get_whatsapp_link(self):
         message = "Olá, tudo bem?"
-        phone = remove_non_numeric(self.phone)
+        cellphone = remove_non_numeric(self.cellphone)
         now = datetime.datetime.now(timezone('America/Sao_Paulo'))
         
         morning = now.hour >= 6 and now.hour <= 11
@@ -74,7 +75,20 @@ class InstagramContact(models.Model):
         elif night:
             message = "Olá, boa noite!"
             
-        return f"https://web.whatsapp.com/send/?phone={phone}&text={message}&type=phone_number&app_absent=0"
+        return f"https://web.whatsapp.com/send/?phone={cellphone}&text={message}&type=phone_number&app_absent=0"
+    
+    def fphone(self):
+        if self.cellphone:
+            if len(self.cellphone) == 13: 
+                return f"+{self.cellphone[0:2]} ({self.cellphone[2:4]}) {self.cellphone[4]} {self.cellphone[5:9]}-{self.cellphone[9:13]}"
+            if len(self.cellphone) == 11 and int(self.cellphone[2]) == 9: 
+                return f"({self.cellphone[0:2]}) {self.cellphone[2]} {self.cellphone[3:7]}-{self.cellphone[7:11]}"
+            elif len(self.cellphone) == 9 and int(self.cellphone[0]) == 9: 
+                return f"{self.cellphone[0:5]}-{self.cellphone[5:9]}"
+            else: 
+                return self.cellphone
+        else:
+            return "-"
     
     def __str__(self):
         if self.username: return self.username
@@ -85,6 +99,7 @@ class Website(models.Model):
     qualified = models.BooleanField(default=None, null=True, blank=True)
     whatsapp = models.BooleanField(default=False)
     linktree = models.BooleanField(default=False)
+    bitly = models.BooleanField(default=False)
 
 class VacancyCategory(models.Model):
     name = models.CharField(max_length=50)
@@ -96,20 +111,6 @@ class VacancyCategory(models.Model):
     def __str__(self):
         return self.name
 
-class Company(models.Model):
-    name = models.CharField(max_length=50)
-    website = models.CharField(max_length=200, null=True, blank=True)
-    email = models.EmailField(null=True, blank=True)
-    linkedin = models.CharField(max_length=200, null=True, blank=True)
-    phone = models.CharField(max_length=13, null=True, blank=True)
-    
-    class Meta:
-        verbose_name = "company"
-        verbose_name_plural = "companies"
-    
-    def __str__(self):
-        return self.name
-    
 class Template(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     message = models.TextField(max_length=600, null=True, blank=True)
@@ -124,7 +125,6 @@ class Curriculum(models.Model):
     def __str__(self):
         return self.name
 
-
 class VacancyLevel(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     
@@ -134,11 +134,11 @@ class VacancyLevel(models.Model):
 class Vacancy(models.Model):
     name = models.CharField(max_length=150)
     link = models.URLField(max_length=200, null=True, blank=True)
-    description = models.TextField(max_length=300, null=True, blank=True)
+    description = models.TextField(max_length=600, null=True, blank=True)
     remote = models.BooleanField(default=False)
     level = models.ForeignKey(VacancyLevel, null=True, on_delete=models.SET_NULL)
     salary = models.SmallIntegerField(default=0)
-    company = models.ForeignKey(Company, null=True, on_delete=models.SET_NULL)
+    company = models.ForeignKey("Company", null=True, on_delete=models.SET_NULL)
     category = models.ForeignKey(VacancyCategory, null=True, on_delete=models.SET_NULL)
     curriculum = models.ForeignKey(Curriculum, null=True, blank=True, on_delete=models.SET_NULL)
     contacted = models.BooleanField(default=False)
@@ -148,6 +148,36 @@ class Vacancy(models.Model):
     class Meta:
         verbose_name = "vacancy"
         verbose_name_plural = "vacancies"
+    
+    def __str__(self):
+        return self.name
+
+class LinkedInContact(models.Model):
+    username = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    archived = models.BooleanField(default=False)
+    
+    def get_linkedin_link(self):
+        return f"https://www.linkedin.com/in/{self.username}"
+    
+    def __str__(self):
+        if self.username: return self.username
+        else: return f"LinkedIn {self.id}"
+    
+class Company(models.Model):
+    name = models.CharField(max_length=50)
+    website = models.CharField(max_length=200, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    linkedin = models.CharField(max_length=200, unique=True, null=True, blank=True)
+    phone = models.CharField(max_length=13, null=True, blank=True)
+    qualified = models.BooleanField(default=None, null=True, blank=True)
+    contacted = models.BooleanField(default=False)
+    archived = models.BooleanField(default=False)
+    template = models.ForeignKey(Template, null=True, blank=True, on_delete=models.SET_NULL)
+    employer = models.ForeignKey(LinkedInContact, null=True, blank=True, on_delete=models.SET_NULL)
+    
+    class Meta:
+        verbose_name = "company"
+        verbose_name_plural = "companies"
     
     def __str__(self):
         return self.name
