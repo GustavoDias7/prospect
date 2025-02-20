@@ -1,7 +1,9 @@
 {% extends "admin/change_form.html" %}
 {% block submit_buttons_bottom %}
 
+{% if template %}
 <pre>{{template}}</pre>
+{% endif %}
 
 {{ block.super }}
 {% endblock %}
