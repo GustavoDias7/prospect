@@ -8,11 +8,13 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, has_string_in_list)
+from prospect.utils import (get_phone, has_string_in_list, is_telephone, is_cellphone)
 from . import models
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.conf import settings
+from prospect import regex
+from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -55,8 +57,7 @@ def get_datas(modeladmin, request, queryset):
                 print("phone not found")
             
             # find e-mail address
-            email_pattern = r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
-            email = re.search(email_pattern, body)
+            email = re.search(regex.EMAIL_PATTERN, body)
             if email:
                 query.email = email.group()
             else:
@@ -125,7 +126,9 @@ def not_menu(modeladmin, request, queryset):
 def open_selenium(modeladmin, request, queryset):
     options = Options()
     driver = webdriver.Firefox(options=options)
-
+    driver.set_window_size(652, 768 - 20)   
+    driver.set_window_position(0, 0)
+ 
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset):
     options = Options()
@@ -145,10 +148,21 @@ def get_instagram_data(modeladmin, request, queryset):
             
     time.sleep(10)
     for query in queryset:
-            
+        print("contact_id:", query.id)
         driver.get(query.get_instagram_link())
             
         time.sleep(10)
+        
+        try:
+            body = driver.find_element(By.TAG_NAME, "body")
+            if body:
+                body_html = body.get_attribute("innerHTML")
+                if "Sorry, this page isn't available." in body_html:
+                    query.qualified = False
+                    query.save()
+                    continue
+        except:
+            pass
     
         # name
         title = driver.find_element(By.TAG_NAME, "title")
@@ -182,7 +196,10 @@ def get_instagram_data(modeladmin, request, queryset):
                 
                 phone_number = get_phone(outer_text)
                 if phone_number:
-                    query.phone = phone_number
+                    if is_cellphone(phone_number):
+                        query.cellphone = phone_number
+                    elif is_telephone(phone_number):
+                        query.telephone = phone_number
                     break
         
         highlights = driver.find_elements(By.CSS_SELECTOR, "section ul > li [role='button']")
@@ -221,39 +238,34 @@ def get_instagram_data(modeladmin, request, queryset):
                 website = urllib.parse.unquote(u_value).split('?')[0]
                 query.website = website
                 
-                stop_bitly = False
-                if "bit.ly" in website:
-                    response = requests.get(query.website)
-                    redirect_website = response.url
-                    for ws in websites:
-                        if ws.website in redirect_website:
-                            if ws.whatsapp:
-                                whatsapp_number = get_phone(redirect_website)
-                                if whatsapp_number and len(whatsapp_number) >= 8:
-                                    query.phone = whatsapp_number
-                                    query.website = None
-                                    stop_bitly = True
-                            elif ws.qualified == False:
-                                query.qualified = False
-                                query.website = redirect_website
-                                stop_bitly = True
+                for ws in websites.filter(bitly=True):
+                    if ws.website in website:
+                        response = requests.get(query.website)
+                        redirect_website = response.url
+                        website = redirect_website
+                        query.website = redirect_website
                 
-                if not stop_bitly:
-                    for ws in websites:
-                        if website and ws.website in website:
-                            if ws.whatsapp:
-                                whatsapp_number = get_phone(u_value)
-                                if whatsapp_number and len(whatsapp_number) >= 8:
-                                    query.phone = whatsapp_number
-                                    query.website = None
-                            elif ws.qualified == False:
-                                query.qualified = False
-                            elif ws.linktree:
-                                driver.execute_script("window.open('');")
-                                driver.switch_to.window(driver.window_handles[1]) 
-                                driver.get(website)
-                                time.sleep(3)
+                for ws in websites:
+                    if website and ws.website in website:
+                        if ws.whatsapp:
+                            whatsapp_number = get_phone(website)
+                            
+                            if whatsapp_number:
+                                if is_cellphone(whatsapp_number):
+                                    query.cellphone = whatsapp_number
+                                elif is_telephone(whatsapp_number):
+                                    query.telephone = whatsapp_number
                                 
+                            query.website = None
+                        elif ws.qualified == False:
+                            query.qualified = False
+                        elif ws.linktree:
+                            driver.execute_script("window.open('');")
+                            driver.switch_to.window(driver.window_handles[1])
+                            driver.get(website)
+                            time.sleep(3)
+                            
+                            try:
                                 linktree_links = driver.find_elements(By.CSS_SELECTOR, "a")
                                 for lt_link in linktree_links:
                                     lt_href = lt_link.get_attribute("href")
@@ -261,17 +273,22 @@ def get_instagram_data(modeladmin, request, queryset):
                                     for ws2 in websites:
                                         if lt_href and ws2.website in lt_href:
                                             if ws2.whatsapp:
-                                                whatsapp_number = get_phone(u_value)
-                                                if whatsapp_number and len(whatsapp_number) >= 8:
-                                                    query.phone = whatsapp_number
-                                                    query.website = None
+                                                whatsapp_number = get_phone(lt_href)
+                                                
+                                                if whatsapp_number:
+                                                    if is_cellphone(whatsapp_number):
+                                                        query.cellphone = whatsapp_number
+                                                    elif is_telephone(whatsapp_number):
+                                                        query.telephone = whatsapp_number
+                                                    
+                                                query.website = None
                                             elif ws2.qualified == False:
                                                 query.qualified = False
                                                 query.website = website
-                                                        
-                                driver.close()
-                                driver.switch_to.window(driver.window_handles[0])
-                    
+                            except Exception as e:
+                                print(e)
+                            driver.close()
+                            driver.switch_to.window(driver.window_handles[0])
         
         posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div a")
         if posts:
@@ -298,6 +315,225 @@ def get_instagram_data(modeladmin, request, queryset):
     
     driver.close()
 
+@admin.action(description="Get data from the LinkedIn profile", permissions=["change"])
+def get_linkedin_data(modeladmin, request, queryset):
+    options = Options()
+    firefox_profile = FirefoxProfile()
+    # firefox_profile.set_preference('permissions.default.stylesheet', 2)
+    # firefox_profile.set_preference('permissions.default.image', 2)
+    # options.profile = firefox_profile
+    driver = webdriver.Firefox(options=options)
+    driver.set_window_size(652, 768 - 20)
+    driver.set_window_position(0, 0)
+    
+    driver.get("https://www.linkedin.com/login")
+    
+    time.sleep(5)
+    
+    form = driver.find_element(By.CLASS_NAME, "login__form")
+    username = driver.find_element(By.ID, "username")
+    password = driver.find_element(By.ID, "password")
+    
+    if settings.LINKEDIN_USERNAME and settings.LINKEDIN_PASSWORD:
+        if username and password and form:
+            username.send_keys(settings.LINKEDIN_USERNAME)
+            password.send_keys(settings.LINKEDIN_PASSWORD)
+            form.submit()
+            time.sleep(3)
+        else:
+            print(form, username, password)
+            return
+    else:
+        print("Missing LinkedIn credentials")
+        return
+    
+    for query in queryset:
+        driver.get(f"https://www.linkedin.com/in/{query.username}/details/experience/")
+        time.sleep(3)
+        
+        try:
+            xpath = "//ul/li/div/section/h2/span"
+            not_experiences = driver.find_element(By.XPATH, xpath)
+            if not_experiences: 
+                print(f"No experiences to {query.username}")
+                query.archived = True
+                query.save()
+                continue
+        except:
+            pass
+        
+        xpath = "//main/section/div/div/div/ul/li"
+        experiences = driver.find_elements(By.XPATH, xpath)
+        if experiences:
+            for experience in experiences:
+                print("=============================")
+                
+                try:
+                    selector = "div > div > div:nth-of-type(2) > div > div > div span:nth-of-type(1)"
+                    experience_title_element = experience.find_element(By.CSS_SELECTOR, selector)
+                except:
+                    try:
+                        selector = "div > div > div:nth-of-type(2) > div > a > div > div > div > div > span:nth-of-type(1)"
+                        experience_title_element = experience.find_element(By.CSS_SELECTOR, selector)
+                    except:
+                        print("Experience title not found")
+                
+                experience_title = None
+                if experience_title_element:
+                    experience_title = experience_title_element.get_attribute("innerText")
+                    print("experience:", experience_title)
+                    
+                    black_list = ("freelance", "suporte", "estágio", "estagiári", "aprendiz", "monitor", "atendente", "auxiliar", "soldado", "assistente", "operador", "vendedor", "studant", "design", "técnico", "php", "java")
+                    
+                    if not any(item in experience_title.lower() for item in black_list):
+                        try:
+                            selector = "div > div > div:nth-of-type(1) a[href*='company']"
+                            company_link_element = experience.find_element(By.CSS_SELECTOR, selector)
+                            company_link = company_link_element.get_attribute("href")
+                            
+                            
+                            continue_script = input("Show company? [y/n]: ")
+                            if continue_script.lower() == "y":
+                                # open company page
+                                driver.execute_script("window.open('');")
+                                driver.switch_to.window(driver.window_handles[1]) 
+                                driver.get(f"{company_link}about")
+                                time.sleep(3)
+                                
+                                input("Press to continue")
+                                
+                                company = models.Company()
+                                
+                                company_title = driver.find_element(By.TAG_NAME, "h1")
+                                # username = company_link.split("/")[3]
+                                if company_title: company.name = company_title.get_attribute("outerText")
+                                if company_link:
+                                    if "/about/" in driver.current_url:
+                                        company.linkedin = driver.current_url.replace("/about/", "/")
+                                    else:
+                                        company.linkedin = driver.current_url
+                                
+                                selector = "section > dl > dd > a"
+                                company_website_element = driver.find_element(By.CSS_SELECTOR, selector)
+                                company_website = company_website_element.get_attribute("href")
+                                
+                                if company_website: company.website = company_website
+                                
+                                # find email by website
+                                try:
+                                    driver.get(company_website)
+                                    time.sleep(2)
+                                except Exception as e:
+                                    print(e)
+                                    continue
+                                
+                                body = driver.find_element(By.TAG_NAME, "body")
+                                email = re.search(regex.EMAIL_PATTERN, body.get_attribute("innerHTML"))
+                                
+                                if email:
+                                    company.email = email.group()
+                                else:
+                                    terms_list = ["contato", "contact", "fale"]
+                                    terms = []
+                                    for term in terms_list:
+                                        terms.append(f"contains(@href, '{term}')")
+                                        
+                                    try:
+                                        xpath = f"//a[{' or '.join(terms)}]"
+                                        contact_page_link = driver.find_element(By.XPATH, xpath)
+                                        contact_page_link = contact_page_link.get_attribute("href")
+                                        if contact_page_link:
+                                            driver.get(contact_page_link)
+                                            time.sleep(2)
+                                            body = driver.find_element(By.TAG_NAME, "body")
+                                            email = re.search(regex.EMAIL_PATTERN, body.get_attribute("innerHTML"))
+                                        
+                                            if email:
+                                                query.email = email.group()
+                                            else:
+                                                print("email not found")
+                                        else:
+                                            print("email not found")
+                                    except Exception as e:
+                                        print(e)
+                                        
+                                company.employer = query
+                                
+                                print("company.name:", company.name)
+                                print("company.linkedin:", company.linkedin)
+                                print("company.website:", company.website)
+                                print("company.email:", company.email)
+                                
+                                save_and_next = input("Save company? [y/n] ")
+                                
+                                if save_and_next.lower() == "y":
+                                    try:
+                                        company.save()
+                                    except Exception as e:
+                                        print(e)
+                                print("=============================")
+                                    
+                                driver.close()
+                                driver.switch_to.window(driver.window_handles[0])
+                        except Exception as e:
+                            has_tabs = len(driver.window_handles) > 1
+                            
+                            if has_tabs and driver.window_handles[1]:
+                                driver.close()
+                                driver.switch_to.window(driver.window_handles[0])
+                                
+                            print("Company link not found")
+        
+        query.archived = True
+        query.save()
+    driver.close()                
+
+@admin.action(description="Get e-mail from the company link", permissions=["change"])
+def get_email_from_link(modeladmin, request, queryset):
+    options = Options()
+    driver = webdriver.Firefox(options=options)
+    driver.set_window_size(652, 768 - 20)
+    driver.set_window_position(0, 0)
+    
+    for query in queryset:
+        if query.website:
+            try:
+                driver.get(query.website)
+            except Exception as e:
+                print(e)
+                continue
+            time.sleep(2)
+
+            body = driver.find_element(By.TAG_NAME, "body")
+            email = re.search(regex.EMAIL_PATTERN, body.get_attribute("innerHTML"))
+            
+            if email:
+                query.email = email.group()
+            else:
+                terms_list = ["contato", "contact", "fale"]
+                terms = []
+                for term in terms_list:
+                    terms.append(f"contains(@href, '{term}')")
+                try:
+                    xpath = f"//a[{' or '.join(terms)}]"
+                    contact_page_link = driver.find_element(By.XPATH, xpath)
+                    contact_page_link = contact_page_link.get_attribute("href")
+                    if contact_page_link:
+                        driver.get(contact_page_link)
+                        time.sleep(2)
+                        body = driver.find_element(By.TAG_NAME, "body")
+                        email = re.search(regex.EMAIL_PATTERN, body.get_attribute("innerHTML"))
+                    
+                        if email:
+                            query.email = email.group()
+                        else:
+                            print("email not found")
+                    else:
+                        print("email not found")
+                except Exception as e:
+                    print(e)
+        query.save()
+    driver.close()
 
 @admin.action(description="Handle bitly and linktree urls", permissions=["change"])
 def handle_bitly_linktree(modeladmin, request, queryset):
@@ -319,4 +555,104 @@ def handle_bitly_linktree(modeladmin, request, queryset):
                         query.website = website
     
     # query.save()
+
+@admin.action(description="Set the qualily of Instagram contact", permissions=["change"])
+def set_contact_quality(modeladmin, request, queryset):
+    options = Options()
+    driver = webdriver.Firefox(options=options)
+    # driver.set_window_size(652, 768 - 20)
+    # driver.set_window_position(0, 0)
+    
+    driver.get("https://www.instagram.com/")
+    time.sleep(3)
+    
+    form = None
+    username = None
+    password = None
+    
+    try:
+        form = driver.find_element(By.CSS_SELECTOR, "#loginForm")
+        username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
+        password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+    except Exception as e:
+        print("Default login form not found.")
+    
+    if form == None:
+        try:
+            form = driver.find_element(By.CSS_SELECTOR, "#login_form")
+            username = driver.find_element(By.CSS_SELECTOR, "input[name='email']")
+            password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+        except Exception as e:
+            print("Meta login form not found.")
         
+    if form == None: return
+    
+    if settings.INSTAGRAM_USERNAME and settings.INSTAGRAM_PASSWORD:
+        if username and password and form:
+            username.send_keys(settings.INSTAGRAM_USERNAME)
+            password.send_keys(settings.INSTAGRAM_PASSWORD)
+            form.submit()
+            time.sleep(10)
+        else:
+            print(form, username, password)
+            return
+    else:
+        print("Missing Instagram credentials")
+        return
+    
+    for index, query in enumerate(queryset):
+        print("=================================")
+        driver.switch_to.window(driver.window_handles[0])
+        driver.get(query.get_instagram_link())
+        time.sleep(3)
+        
+        print(f"{index + 1} of {len(queryset)}")
+        print("name:", query.name)
+        print("username:", query.username)
+        print("last post:", query.last_post.strftime("%b. %d, %Y"))
+        print("phone:", query.fphone())
+        print("website:", query.website)
+        
+        is_empty_or_telephone = type(query.phone) == str and len(query.phone) in (0, 8, 9, 10, 12)
+        if query.phone == None or is_empty_or_telephone:
+            set_phone_number = input("Do you want to set a new phone number? [y/n]")
+            if set_phone_number.lower() == "y":
+                new_number = input("Enter the phone number: ")
+                query.phone = get_phone(new_number)
+        
+        continue_or_disqualify = input("Continue (y) or disqualify/archive (n)? ")
+        
+        if continue_or_disqualify.lower() == "y":
+            if len(driver.window_handles) == 1:
+                driver.execute_script("window.open('');")
+                driver.switch_to.window(driver.window_handles[1])
+            elif len(driver.window_handles) > 1:
+                driver.switch_to.window(driver.window_handles[1])
+            driver.get(query.get_whatsapp_link())
+            
+            continue_or_disqualify = input("Qualify (y) or disqualify/archive (n)? ")
+            
+            if continue_or_disqualify.lower() == "y":
+                query.qualified = True
+            
+                decider_name = input("Name of decider? ")
+                if len(decider_name) >= 3:
+                    decider = models.Decider()
+                    decider.name = decider_name
+                    decider.save()
+                    query.decider = decider
+            
+        if continue_or_disqualify.lower() != "y":
+            disqualify_or_archive = input("Disqualify(d) or archive (a)? ")
+            if disqualify_or_archive.lower() == "d":
+                query.qualified = False
+                disqualify_website = input("Disqualified website? [y/n] ")
+                if disqualify_website.lower() == "y":
+                    query.website = input("Enter disqualified website: ")
+            else:
+                query.archived = True
+            
+                
+        query.save()
+        print("=================================")
+    driver.close()
