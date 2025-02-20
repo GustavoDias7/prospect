@@ -6,12 +6,14 @@ import time
 from core.models import InstagramContact
 from django.core.management.base import BaseCommand
 import urllib.parse
-
+from selenium.webdriver.support.ui import Select
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
         options = Options()
         driver = webdriver.Firefox(options=options)
+        driver.set_window_size(652, 768 - 20)
+        driver.set_window_position(0, 0)
 
         driver.get("https://lite.duckduckgo.com/lite/")
         search = input("Search: ")
@@ -20,9 +22,14 @@ class Command(BaseCommand):
         input_query = driver.find_element(By.CLASS_NAME, "query")
         input_query.send_keys(query)
         input_query.send_keys(Keys.RETURN)
-
         time.sleep(3)
 
+        select = Select(driver.find_element(By.CSS_SELECTOR, '.filters select'))
+        select.select_by_value('br-pt')
+
+        input_query = driver.find_element(By.CLASS_NAME, "query")
+        input_query.send_keys(Keys.RETURN)
+        
         continue_script = "y"
         while continue_script.lower() == "y":
             links = driver.find_elements(By.CLASS_NAME, 'result-link')
