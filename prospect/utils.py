@@ -31,15 +31,25 @@ def get_phone(value: str):
         re.search(r"\d{13}", value), # '9999999999999'
         re.search(r"\d{12}", value), # '999999999999'
         re.search(r"\(\d{2}\) \d{5}-\d{4}", value), # '(99) 99999-9999'
+        re.search(r"\(\d{2}\)\d{5}-\d{4}", value), # '(99)99999-9999'
+        re.search(r"\d{7}-\d{4}", value), # '9999999-9999'
+        re.search(r"\(\d{2}\)\d{9}", value), # '(99)999999999'
+        re.search(r"\d{2} \d{5}-\d{4}", value), # '99 99999-9999'
+        re.search(r"\d{2} \d{5} - \d{4}", value), # '99 99999 - 9999'
+        re.search(r"\d{2}.\d{5}-\d{4}", value), # '99.99999-9999'
+        re.search(r"\d{2}.\d{9}", value), # '99.999999999'
+        re.search(r"\(\d{2}\) \d{9}", value), # '(99) 999999999'
+        re.search(r"\(\d{2}\)9 \d{8}", value), # '(99)9 99999999'
+        re.search(r"\(\d{2}\) 9 \d{8}", value), # '(99) 9 99999999'
+        re.search(r"\d{5}-\d{4}", value), # '99999-9999'
+        re.search(r"\d{5} \d{4}", value), # '99999 9999'
+        re.search(r"\d{9}", value), # '999999999'
+        
         re.search(r"\(\d{2}\) \d{4}-\d{4}", value), # '(99) 9999-9999'
         re.search(r"\(\d{2}\)\d{4}-\d{4}", value), # '(99)9999-9999'
-        re.search(r"\(\d{2}\)\d{4}\d{4}", value), # '(99)99999999'
-        re.search(r"\(\d{2}\) \d{5}-\d{4}", value), # '(99)999999999'
-        re.search(r"\d{2} \d{5}-\d{4}", value), # '99 99999-9999'
-        re.search(r"\(\d{2}\) \d{9}", value), # '(99) 999999999'
-        re.search(r"\d{5}-\d{4}", value), # '99999-9999'
-        re.search(r"\(\d{2}\)9 \d{8}", value), # '(99)9 99999999'
-        re.search(r"\d{9}", value), # '999999999'
+        re.search(r"\(\d{2}\)\d{8}", value), # '(99)99999999'
+        re.search(r"\d{2}.\d{4}-\d{4}", value), # '99.9999-9999'
+        re.search(r"\d{2}.\d{8}", value), # '99.99999999'
         re.search(r"\d{8}", value), # '99999999'
         re.search(r"\d{4}-\d{4}", value), # '9999-9999'
     ]
@@ -91,3 +101,13 @@ def has_string_in_list(string: str, string_list: list[str], case_sensitive=False
             break
     
     return result
+
+def is_telephone(value: str) -> bool:
+    if value == None: return False
+    number = remove_non_numeric(value)
+    return len(number) in (8, 10, 12)
+
+def is_cellphone(value: str) -> bool:
+    if value == None: return False
+    number = remove_non_numeric(value)
+    return len(number) in (9, 11, 13)
