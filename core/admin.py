@@ -121,11 +121,12 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 @admin.register(models.Decider)
 class DeciderAdmin(admin.ModelAdmin):
     list_display = ["id", "name", "phone", "email", "instagram"]
+    search_fields = ["id", "name", "email"]
     
 @admin.register(models.InstagramContact)
 class InstagramContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived"]
-    list_display = ["id", "name_", "phone_", "website_", "last_post_", "decider__name", "menu"]
+    list_display = ["id", "name_", "cellphone_", "telephone", "website_", "last_post_", "decider__name", "menu", "google_search"]
     actions = [
         actions.get_instagram_data, 
         actions.disqualify, 
@@ -134,9 +135,12 @@ class InstagramContactAdmin(admin.ModelAdmin):
         actions.archive,
         actions.has_menu,
         actions.not_menu,
-        actions.handle_bitly_linktree
+        actions.handle_bitly_linktree,
+        actions.set_contact_quality,
+        actions.open_selenium,
     ]
-    search_fields = ["id", "username", "website", "phone"]
+    search_fields = ["id", "username", "website", "cellphone"]
+    autocomplete_fields = ["decider"]
     
     def get_form(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
@@ -146,10 +150,10 @@ class InstagramContactAdmin(admin.ModelAdmin):
                 html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
-            if obj.phone:
+            if obj.cellphone:
                 help_text = obj.get_whatsapp_link()
                 html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
-                help_texts["help_texts"].update({"phone": mark_safe(html)}) 
+                help_texts["help_texts"].update({"cellphone": mark_safe(html)}) 
                 
             if obj.username:
                 help_text = obj.get_instagram_link()
@@ -190,33 +194,45 @@ class InstagramContactAdmin(admin.ModelAdmin):
         else:
             return "-"
         
-    @admin.display(description='phone')
-    def phone_(self, obj):
-        if obj.phone:
-            if len(obj.phone) == 13: 
+    @admin.display(description='google search')
+    def google_search(self, obj):
+        if obj.name or obj.username:
+            search = []
+            if obj.name: search.append(obj.name)
+            if obj.username: search.append(obj.username)
+            query = " OR ".join(search)
+            html = f'<a href="https://www.google.com/search?q={query}" target="_blannk">Search</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+        
+    @admin.display(description='cellphone')
+    def cellphone_(self, obj):
+        if obj.cellphone:
+            if len(obj.cellphone) == 13: 
                 link_number = obj.get_whatsapp_link()
-                inner_text = f"+{obj.phone[0:2]} ({obj.phone[2:4]}) {obj.phone[4]} {obj.phone[5:9]}-{obj.phone[9:13]}"
+                inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
                 whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
                 return mark_safe(whatsapp)
-            if len(obj.phone) == 11 and int(obj.phone[2]) == 9: 
+            if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
                 link_number = obj.get_whatsapp_link()
-                inner_text = f"({obj.phone[0:2]}) {obj.phone[2]} {obj.phone[3:7]}-{obj.phone[7:11]}"
+                inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
                 whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
                 return mark_safe(whatsapp)
-            elif len(obj.phone) == 9 and int(obj.phone[0]) == 9: 
+            elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
                 link_number = obj.get_whatsapp_link()
-                inner_text = f"{obj.phone[0:5]}-{obj.phone[5:9]}"
+                inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
                 whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
                 return mark_safe(whatsapp)
             else: 
-                return obj.phone
+                return obj.cellphone
         else:
             return "-"
         
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]
-    list_display = ["id", "website", "qualified", "whatsapp", "linktree"]
+    list_display = ["id", "website", "qualified", "whatsapp", "linktree", "bitly"]
 
 @admin.register(models.Vacancy)
 class VacancyAdmin(admin.ModelAdmin):
@@ -231,10 +247,13 @@ class VacancyAdmin(admin.ModelAdmin):
         
         try:
             vacancy = models.Vacancy.objects.get(id=object_id)
-            template = Template(vacancy.template.message)
-            context = Context({'vacancy': vacancy})
-            rendered_content = template.render(context)
-            extra_context["template"] = rendered_content
+            if vacancy.template:
+                template = Template(vacancy.template.message)
+                context = Context({'company': vacancy.company})
+                rendered_content = template.render(context)
+                extra_context["template"] = rendered_content
+            else:
+                extra_context["template"] = None
         except ObjectDoesNotExist:
             extra_context["template"] = None
         
@@ -247,7 +266,71 @@ class VacancyAdmin(admin.ModelAdmin):
 
 @admin.register(models.Company)
 class CompanyAdmin(admin.ModelAdmin):
+    list_display = ["id", "name_", "linkedin_", "email", "phone"]
     search_fields = ["name"]
+    list_filter = ["qualified", "contacted", "archived"]
+    autocomplete_fields = ["template", "employer"]
+    change_form_template = 'admin/vacancy_change_form.html'
+    actions = [actions.qualify, actions.disqualify, actions.archive, actions.get_email_from_link]
+    
+    def get_form(self, request, obj=None, **kwargs):
+        help_texts = { "help_texts": {} }
+        if obj:
+            if obj.linkedin:
+                help_text = obj.linkedin
+                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                help_texts["help_texts"].update({"linkedin": mark_safe(html)}) 
+            
+            if obj.website:
+                help_text = obj.website
+                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                help_texts["help_texts"].update({"website": mark_safe(html)}) 
+                
+            kwargs.update(help_texts)
+                
+        return super().get_form(request, obj, **kwargs)
+    
+    @admin.display(description='name')
+    def name_(self, obj):
+        if obj.name:
+            length = 30
+            inner_text = obj.name[0:length - 1] if len(obj.name) > length else obj.name
+            html = f'<a href="{obj.website}" target="_blannk">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+
+    @admin.display(description='linkedin')
+    def linkedin_(self, obj):
+        if obj.linkedin:
+            length = 30
+            inner_text = obj.linkedin[0:length - 1] if len(obj.linkedin) > length else obj.linkedin
+            html = f'<a href="{obj.linkedin}" target="_blannk">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+    
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        
+        try:
+            company = models.Company.objects.get(id=object_id)
+            if company.template:
+                template = Template(company.template.message)
+                context = Context({'company': company})
+                rendered_content = template.render(context)
+                extra_context["template"] = rendered_content
+            else:
+                extra_context["template"] = None
+        except ObjectDoesNotExist:
+            extra_context["template"] = None
+        
+        return super().change_view(
+            request,
+            object_id,
+            form_url,
+            extra_context=extra_context,
+        )
 
 @admin.register(models.VacancyCategory)
 class VacancyCategoryAdmin(admin.ModelAdmin):
@@ -264,3 +347,19 @@ class CurriculumAdmin(admin.ModelAdmin):
 @admin.register(models.VacancyLevel)
 class VacancyLevelAdmin(admin.ModelAdmin):
     search_fields = ["name"]
+    
+@admin.register(models.LinkedInContact)
+class LinkedInContactAdmin(admin.ModelAdmin):
+    list_display = ["id", "name_"]
+    list_filter = ["archived"]
+    search_fields = ["username"]
+    actions = [actions.get_linkedin_data, actions.archive, actions.open_selenium]
+    
+    @admin.display(description='linkedin')
+    def name_(self, obj):
+        if obj.username:
+            inner_text = obj.username
+            html = f'<a href="{obj.get_linkedin_link()}" target="_blannk">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
