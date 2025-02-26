@@ -6,7 +6,7 @@ from import_export.admin import ImportExportModelAdmin
 from django.core.exceptions import ObjectDoesNotExist
 from bs4 import BeautifulSoup
 import urllib.parse
-from . import models
+from . import models, forms
 from django.template import Context, Template
 
 @admin.register(models.Contact)
@@ -126,7 +126,7 @@ class DeciderAdmin(admin.ModelAdmin):
 @admin.register(models.InstagramContact)
 class InstagramContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived"]
-    list_display = ["id", "name_", "cellphone_", "telephone", "website_", "last_post_", "decider__name", "menu", "google_search"]
+    list_display = ["id", "name_", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider__name"]
     actions = [
         actions.get_instagram_data, 
         actions.disqualify, 
@@ -135,12 +135,13 @@ class InstagramContactAdmin(admin.ModelAdmin):
         actions.archive,
         actions.has_menu,
         actions.not_menu,
-        actions.handle_bitly_linktree,
         actions.set_contact_quality,
-        actions.open_selenium,
+        actions.send_whatsapp_message,
+        actions.open_selenium
     ]
     search_fields = ["id", "username", "website", "cellphone"]
     autocomplete_fields = ["decider"]
+    form = forms.InstagramContactForm
     
     def get_form(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
@@ -151,7 +152,7 @@ class InstagramContactAdmin(admin.ModelAdmin):
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
             if obj.cellphone:
-                help_text = obj.get_whatsapp_link()
+                help_text = obj.get_whatsapp_link(add_message=False)
                 html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
                 help_texts["help_texts"].update({"cellphone": mark_safe(html)}) 
                 
@@ -189,19 +190,19 @@ class InstagramContactAdmin(admin.ModelAdmin):
         if obj.website:
             leng = 30
             inner_text = obj.website[0:leng - 1] if len(obj.website) > leng else obj.website
+            if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
             html = f'<a href="{obj.website}" target="_blannk">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
         
-    @admin.display(description='google search')
-    def google_search(self, obj):
-        if obj.name or obj.username:
-            search = []
-            if obj.name: search.append(obj.name)
-            if obj.username: search.append(obj.username)
-            query = " OR ".join(search)
-            html = f'<a href="https://www.google.com/search?q={query}" target="_blannk">Search</a>'
+    @admin.display(description='website2')
+    def website2_(self, obj):
+        if obj.website2:
+            leng = 30
+            inner_text = obj.website2[0:leng - 1] if len(obj.website2) > leng else obj.website2
+            if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
+            html = f'<a href="{obj.website2}" target="_blannk">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -210,17 +211,17 @@ class InstagramContactAdmin(admin.ModelAdmin):
     def cellphone_(self, obj):
         if obj.cellphone:
             if len(obj.cellphone) == 13: 
-                link_number = obj.get_whatsapp_link()
+                link_number = obj.get_whatsapp_link(add_message=False)
                 inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
                 whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
                 return mark_safe(whatsapp)
             if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
-                link_number = obj.get_whatsapp_link()
+                link_number = obj.get_whatsapp_link(add_message=False)
                 inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
                 whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
                 return mark_safe(whatsapp)
             elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
-                link_number = obj.get_whatsapp_link()
+                link_number = obj.get_whatsapp_link(add_message=False)
                 inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
                 whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
                 return mark_safe(whatsapp)
@@ -232,7 +233,8 @@ class InstagramContactAdmin(admin.ModelAdmin):
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]
-    list_display = ["id", "website", "qualified", "whatsapp", "linktree", "bitly"]
+    search_fields = ["website"]
+    list_display = ["id", "website", "qualified", "whatsapp", "linktree", "bitly", "social_media"]
 
 @admin.register(models.Vacancy)
 class VacancyAdmin(admin.ModelAdmin):

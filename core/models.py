@@ -41,12 +41,16 @@ class Decider(models.Model):
         if self.name: return self.name
         else: return f"Decider {self.id}"
         
+# class SeleniumDriver(models.Model):
+#     name = models.CharField(max_length=50, null=True, blank=True)
+        
 class InstagramContact(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     cellphone = models.CharField(max_length=13, null=True, blank=True)
     telephone = models.CharField(max_length=12, null=True, blank=True)
     website = models.URLField(max_length=200, null=True, blank=True)
+    website2 = models.URLField(max_length=200, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
     qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
@@ -59,25 +63,29 @@ class InstagramContact(models.Model):
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.username}"
     
-    def get_whatsapp_link(self):
-        message = "Olá, tudo bem?"
+    def get_whatsapp_link(self, add_message: bool | None = True):
         cellphone = remove_non_numeric(self.cellphone)
-        now = datetime.datetime.now(timezone('America/Sao_Paulo'))
         
-        morning = now.hour >= 6 and now.hour <= 11
-        afternoon = now.hour >= 12 and now.hour <= 17
-        night = now.hour >= 18
-        
-        if morning:
-            message = "Olá, bom dia!"
-        elif afternoon:
-            message = "Olá, boa tarde!"
-        elif night:
-            message = "Olá, boa noite!"
+        if add_message:
+            message = "Olá, tudo bem?"
+            now = datetime.datetime.now(timezone('America/Sao_Paulo'))
             
-        return f"https://web.whatsapp.com/send/?phone={cellphone}&text={message}&type=phone_number&app_absent=0"
+            morning = now.hour >= 6 and now.hour <= 11
+            afternoon = now.hour >= 12 and now.hour <= 17
+            night = now.hour >= 18
+            
+            if morning:
+                message = "Olá, bom dia!"
+            elif afternoon:
+                message = "Olá, boa tarde!"
+            elif night:
+                message = "Olá, boa noite!"
+            
+            return f"https://web.whatsapp.com/send/?phone={cellphone}&text={message}"
+        else:
+            return f"https://web.whatsapp.com/send/?phone={cellphone}"
     
-    def fphone(self):
+    def fcellphone(self):
         if self.cellphone:
             if len(self.cellphone) == 13: 
                 return f"+{self.cellphone[0:2]} ({self.cellphone[2:4]}) {self.cellphone[4]} {self.cellphone[5:9]}-{self.cellphone[9:13]}"
@@ -88,7 +96,20 @@ class InstagramContact(models.Model):
             else: 
                 return self.cellphone
         else:
-            return "-"
+            return None
+        
+    def ftelephone(self):
+        if self.telephone:
+            if len(self.telephone) == 12: 
+                return f"+{self.telephone[0:2]} ({self.telephone[2:4]}) {self.telephone[4:8]}-{self.telephone[8:12]}"
+            if len(self.telephone) == 10: 
+                return f"({self.telephone[0:2]}) {self.telephone[2:6]}-{self.telephone[6:10]}"
+            elif len(self.telephone) == 8: 
+                return f"{self.telephone[0:4]}-{self.telephone[4:8]}"
+            else: 
+                return self.telephone
+        else:
+            return None
     
     def __str__(self):
         if self.username: return self.username
@@ -100,6 +121,7 @@ class Website(models.Model):
     whatsapp = models.BooleanField(default=False)
     linktree = models.BooleanField(default=False)
     bitly = models.BooleanField(default=False)
+    social_media = models.BooleanField(default=False)
 
 class VacancyCategory(models.Model):
     name = models.CharField(max_length=50)

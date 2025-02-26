@@ -1,5 +1,7 @@
 import re
-# from unidecode import unidecode
+from selenium import webdriver
+from selenium.webdriver.remote.webelement import WebElement
+import time
 
 def remove_non_numeric(value:str):
     return "".join(e for e in value if e.isdigit())
@@ -31,16 +33,20 @@ def get_phone(value: str):
         re.search(r"\d{13}", value), # '9999999999999'
         re.search(r"\d{12}", value), # '999999999999'
         re.search(r"\(\d{2}\) \d{5}-\d{4}", value), # '(99) 99999-9999'
+        re.search(r"\(\d{2}\) 9 \d{5}-\d{4}", value), # '(99) 9 9999-9999'
         re.search(r"\(\d{2}\)\d{5}-\d{4}", value), # '(99)99999-9999'
+        re.search(r"\(\d{2}\)9.\d{4}-\d{4}", value), # '(99)9.9999-9999'
         re.search(r"\d{7}-\d{4}", value), # '9999999-9999'
         re.search(r"\(\d{2}\)\d{9}", value), # '(99)999999999'
         re.search(r"\d{2} \d{5}-\d{4}", value), # '99 99999-9999'
+        re.search(r"\d{2} \d{5} \d{4}", value), # '99 99999 9999'
         re.search(r"\d{2} \d{5} - \d{4}", value), # '99 99999 - 9999'
         re.search(r"\d{2}.\d{5}-\d{4}", value), # '99.99999-9999'
         re.search(r"\d{2}.\d{9}", value), # '99.999999999'
         re.search(r"\(\d{2}\) \d{9}", value), # '(99) 999999999'
         re.search(r"\(\d{2}\)9 \d{8}", value), # '(99)9 99999999'
         re.search(r"\(\d{2}\) 9 \d{8}", value), # '(99) 9 99999999'
+        re.search(r"\d{11}", value), # '99999999999'
         re.search(r"\d{5}-\d{4}", value), # '99999-9999'
         re.search(r"\d{5} \d{4}", value), # '99999 9999'
         re.search(r"\d{9}", value), # '999999999'
@@ -110,4 +116,51 @@ def is_telephone(value: str) -> bool:
 def is_cellphone(value: str) -> bool:
     if value == None: return False
     number = remove_non_numeric(value)
-    return len(number) in (9, 11, 13)
+    return len(number) in (9, 11, 13) and number[-9] == "9"
+
+def open_tab(driver: webdriver.Firefox, search: str, index_tab: int, sleep: int | None = None):
+    driver.execute_script("window.open('');")
+    driver.switch_to.window(driver.window_handles[index_tab])
+    driver.get(search)
+    if type(sleep) == int: time.sleep(sleep)
+    
+def close_tab(driver: webdriver.Firefox, index_tab: int):
+    driver.close()
+    driver.switch_to.window(driver.window_handles[index_tab])
+    
+def selenium_click(driver: webdriver.Firefox, element: WebElement):
+    driver.execute_script("arguments[0].click();", element)
+
+# times = 1
+def try_white(
+        callback, 
+        times: int = 1, 
+        sleep_initial: int | None = None, 
+        sleep_before: int | None = None, 
+        sleep_after: int | None = None
+    ):
+    
+    if type(sleep_initial) == int:
+        time.sleep(sleep_initial)
+    
+    counter = 1
+    
+    while counter <= times:
+        if type(sleep_before) == int:
+            time.sleep(sleep_before)
+            
+        result = callback()
+        print("result:", result)
+        print("counter:", counter)
+        
+        if type(result) != bool:
+            raise TypeError("The function should return a boolean value.")
+    
+        if result: break
+        else: counter = counter + 1
+        
+        if type(sleep_after) == int:
+            time.sleep(sleep_after)
+
+
+# https://l.instagram.com/?u=http%3A%2F%2Fapi.whatsapp.com%2Fsend%2F%2F%3Fphone%3D5521986292233%26fbclid%3DPAZXh0bgNhZW0CMTEAAaacqRdHB8AthYC0O0H5hJ5vpcGHZvIcSnlnst_DEfaLNhmHQNpHqF_1lZE_aem_EKr1KmhBZE-tvhR5G5OSEA&e=AT2gveyxAIBzRCu7HL6V5swLF8ApnS1BnfnmvgeqyIMHgsUTKBuXVoUT832ovnS-WfWAc3vB59OXQe-k3t41jTr_gEn4ZbZV8XIoMA

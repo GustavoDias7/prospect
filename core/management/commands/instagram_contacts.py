@@ -18,6 +18,8 @@ class Command(BaseCommand):
         driver.get("https://lite.duckduckgo.com/lite/")
         search = input("Search: ")
         query = f"{search} site:instagram.com"
+        
+        pages = int(input("Pages: ")) or 10
 
         input_query = driver.find_element(By.CLASS_NAME, "query")
         input_query.send_keys(query)
@@ -31,7 +33,11 @@ class Command(BaseCommand):
         input_query.send_keys(Keys.RETURN)
         
         continue_script = "y"
+        counter = 1
+        counter_page = 1
         while continue_script.lower() == "y":
+            print(f"Page {counter_page}")
+            
             links = driver.find_elements(By.CLASS_NAME, 'result-link')
             contacts = []
             for link in links:
@@ -46,10 +52,14 @@ class Command(BaseCommand):
                 
             next_form = driver.find_element(By.CLASS_NAME, "next_form")
             next_form.submit()
-
-            time.sleep(3)
             
-            continue_script = input("Continue script? [y/n] ")
+            counter = counter + 1
+            counter_page = counter_page + 1
+            if counter > pages:
+                continue_script = input(f"More {pages} pages? [y/n] ")
+                counter = 1
+            else:
+                time.sleep(4)
         
         driver.close()
 
