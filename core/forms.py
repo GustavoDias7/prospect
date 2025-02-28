@@ -1,10 +1,26 @@
 from django import forms
-from .models import InstagramContact
+from . import models
 
-class InstagramContactForm(forms.ModelForm):
+class BusinessContactForm(forms.ModelForm):
     class Meta:
-        model = InstagramContact
+        model = models.BusinessContact
         fields = "__all__"
         
     class Media:
         js = ('js/admin/instagram_contacts.js',)
+        
+class TemplateForm(forms.ModelForm):
+    class Meta:
+        model = models.Template
+        fields = "__all__"
+        
+    class Media:
+        js = ('js/admin/template.js',)
+        
+class DeciderForm(forms.ModelForm):
+    class Meta:
+        model = models.Decider
+        fields = "__all__"
+        
+    class Media:
+        js = ('js/admin/decider.js',)

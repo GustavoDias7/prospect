@@ -122,7 +122,7 @@ def has_menu(modeladmin, request, queryset):
 @admin.action(description="Has no menu", permissions=["change"])
 def not_menu(modeladmin, request, queryset):
     queryset.update(menu=False)
-    
+
 @admin.action(description="Open Selenium", permissions=["change"])
 def open_selenium(modeladmin, request, queryset):
     options = Options()
@@ -159,15 +159,13 @@ def get_instagram_data(modeladmin, request, queryset):
         except:
             pass
             
-    
     open_tab(driver, "https://web.whatsapp.com/", 1)
     input("Press enter to continue ")
     close_tab(driver, 0)
             
     for index, query in enumerate(queryset):
         print("=============================")
-        print(f"{index + 1} of {len(queryset)}")
-        print("contact_id:", query.id)
+        print(f"{index + 1} of {len(queryset)} - id: {query.id}")
         driver.get(query.get_instagram_link())
             
         time.sleep(10)
@@ -179,6 +177,7 @@ def get_instagram_data(modeladmin, request, queryset):
                 if "Sorry, this page isn't available." in body_html:
                     query.qualified = False
                     query.save()
+                    print("disqualified from page not available")
                     continue
         except:
             pass
@@ -193,14 +192,41 @@ def get_instagram_data(modeladmin, request, queryset):
                 if name:
                     query.name = name.group(1)
                     
+        disqualified_websites = models.Website.objects.filter(qualified=False)
+        
         role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
-        if role_buttons:
+        if role_buttons and len(role_buttons) > 0:
+            
             # open "more" button from bio
             for role_button in role_buttons:
                 outer_text = role_button.get_attribute("outerText")
                 if not outer_text: continue
                 if "more" in outer_text:
                     role_button.click()
+                    break
+                
+            # check for not qualified websites in the bio
+            for role_button in role_buttons:
+                try:
+                    # more button does not exist -> StaleElementReferenceException
+                    outer_text = role_button.get_attribute("outerText")
+                except:
+                    continue
+                if not outer_text: continue
+                else: outer_text = outer_text.lower()
+                
+                is_qualified = None
+                
+                for ws in disqualified_websites:
+                    if outer_text and ws.website in outer_text:
+                        if ws.qualified == False:
+                            is_qualified = False
+                            query.website = ws.website
+                            query.qualified = False
+                            print("disqualified from bio")
+                            break
+                
+                if is_qualified == False:
                     break
             
             # get number from bio
@@ -224,21 +250,32 @@ def get_instagram_data(modeladmin, request, queryset):
                     break
         
         highlights = driver.find_elements(By.CSS_SELECTOR, "section ul > li [role='button']")
-        if highlights:
+        if highlights and len(highlights) > 0:
             for highlight in highlights:
-                try:
-                    outer_text = highlight.get_attribute("outerText")
-                except:
-                    continue
+                outer_text = highlight.get_attribute("outerText")
                 
                 if not outer_text: continue
+                else: outer_text = outer_text.lower()
+                
+                is_qualified = None
+                
+                for ws in disqualified_websites:
+                    if outer_text and ws.website in outer_text:
+                        if ws.qualified == False:
+                            is_qualified = False
+                            query.qualified = False
+                            print("disqualified from highlight")
+                            break
+                
+                if is_qualified == False:
+                    break
                 
                 menu_terms = ["catálogo", "cardápio", "menu", "pratos", "pizzas"]
                 has_menu_in_highlight = has_string_in_list(outer_text, menu_terms)
                 if has_menu_in_highlight:
                     query.menu = True
                     break
-                    
+                
         # open link modals
         buttons = driver.find_elements(By.TAG_NAME, "button")
         if buttons:
@@ -253,12 +290,14 @@ def get_instagram_data(modeladmin, request, queryset):
         websites = models.Website.objects.all()
         links_to_redirect = driver.find_elements(By.CSS_SELECTOR, "a[href*='l.instagram.com']")
         
-        if links_to_redirect:
+        if links_to_redirect and len(links_to_redirect) > 0:
             for link in links_to_redirect:
                 href = urllib.parse.urlparse(link.get_attribute("href"))
                 query_params = urllib.parse.parse_qs(href.query)
                 u_param = query_params.get('u', [None])[0]
-                website = u_param.split("?fbclid")[0]
+                website = ""
+                if "&fbclid" in u_param: website = u_param.split("&fbclid")[0]
+                elif "?fbclid" in u_param: website = u_param.split("?fbclid")[0]
                 
                 is_whatsapp = False
                 is_linktree = False
@@ -267,9 +306,12 @@ def get_instagram_data(modeladmin, request, queryset):
                 
                 for ws in websites.filter(bitly=True, linktree=False):
                     if ws.website in website:
+                        print("website before:", website)
                         response = requests.get(website)
                         redirect_website = response.url
                         website = redirect_website
+                        print("website after:", website)
+                        break
                 
                 for ws in websites:
                     if website and ws.website in website:
@@ -285,17 +327,19 @@ def get_instagram_data(modeladmin, request, queryset):
                 if is_unknown: 
                     query.website = website
                 elif is_whatsapp:
-                    whatsapp_number = get_phone(website)
-                    if whatsapp_number:
-                        if is_cellphone(whatsapp_number):
-                            if len(whatsapp_number) == 11:
-                                whatsapp_number = f"55{whatsapp_number}"
-                            query.cellphone = whatsapp_number
-                        elif is_telephone(whatsapp_number):
-                            query.telephone = whatsapp_number
+                    phone_number = get_phone(website)
+                    if phone_number:
+                        if is_cellphone(phone_number):
+                            if len(phone_number) == 11:
+                                phone_number = f"55{phone_number}"
+                            query.cellphone = phone_number
+                            print("is_whatsapp website:", query.cellphone)
+                        elif is_telephone(phone_number):
+                            query.telephone = phone_number
                 elif is_qualified == False:
                     query.website = website
                     query.qualified = False
+                    print("disqualified from website bio")
                     break
                 elif is_linktree:
                     query.website2 = website
@@ -324,17 +368,18 @@ def get_instagram_data(modeladmin, request, queryset):
                             if is_unknown2: 
                                 query.website = lt_href
                             elif is_whatsapp2:
-                                whatsapp_number = get_phone(lt_href)
-                                if whatsapp_number:
-                                    if is_cellphone(whatsapp_number):
-                                        if len(whatsapp_number) == 11:
-                                            whatsapp_number = f"55{whatsapp_number}"
-                                        query.cellphone = whatsapp_number
-                                    elif is_telephone(whatsapp_number):
-                                        query.telephone = whatsapp_number
+                                phone_number = get_phone(lt_href)
+                                if phone_number:
+                                    if is_cellphone(phone_number):
+                                        if len(phone_number) == 11:
+                                            phone_number = f"55{phone_number}"
+                                        query.cellphone = phone_number
+                                    elif is_telephone(phone_number):
+                                        query.telephone = phone_number
                             elif is_qualified2 == False:
                                 query.website = lt_href
                                 query.qualified = False
+                                print("disqualified from linktree")
                                 break
                             elif is_linktree2:
                                 query.website2 = lt_href
@@ -344,13 +389,14 @@ def get_instagram_data(modeladmin, request, queryset):
                         print(e)
                         
                     close_tab(driver=driver, index_tab=0)
+        
         try:
             posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div a")
-            if posts:
+            if posts and len(posts) > 0:
                 for post in posts:
                     text_post = post.get_attribute("text")
                     if "Pinned" not in text_post:
-                        driver.execute_script("arguments[0].click();", post)
+                        selenium_click(driver, post)
                         
                         try:
                             js_last_post_element = driver.find_element(By.CSS_SELECTOR, "a > span > time")
@@ -364,14 +410,81 @@ def get_instagram_data(modeladmin, request, queryset):
                             limit_datetime = timezone.now() - timedelta(days=365)
                             if last_post <= limit_datetime:
                                 query.qualified = False
+                                print("disqualified from last post")
+                        
+                        # close post modal
+                        role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+                        if role_buttons and len(role_buttons) >= 1:
+                            for role_button in role_buttons:
+                                try:
+                                    close_button = role_button.find_element(By.CSS_SELECTOR, "[aria-label='Close']")
+                                    if close_button:
+                                        close_button.click()
+                                        time.sleep(1)
+                                        break
+                                except:
+                                    pass
+                        
                         break
                 
+                if query.qualified == None:
+                    selenium_click(driver, posts[0])
+                    
+                    for index, post in enumerate(posts):
+                        if index > 5: break
+                        time.sleep(3)
+                        
+                        try:
+                            first_comment = driver.find_element(By.CSS_SELECTOR, "[role='presentation'] ul li h1")
+                            try:
+                                outer_text = first_comment.get_attribute("outerText")
+                            except:
+                                outer_text = None
+                            
+                            if outer_text:
+                                outer_text = outer_text.lower()
+                                
+                                is_qualified = None
+                            
+                                for ws in disqualified_websites:
+                                    if outer_text and ws.website in outer_text:
+                                        if ws.qualified == False:
+                                            is_qualified = False
+                                            query.qualified = False
+                                            print("disqualified from first comment")
+                                            break
+                                
+                                if is_qualified == False:
+                                    break
+                                
+                                none_or_nine_cellphone = query.cellphone == None or (type(query.cellphone) == str and len(query.cellphone) == 9)
+                                if none_or_nine_cellphone:
+                                    phone_number = get_phone(outer_text)
+                                    if phone_number and is_cellphone(phone_number):
+                                            if len(phone_number) == 11:
+                                                phone_number = f"55{phone_number}"
+                                            query.cellphone = phone_number
+                        except:
+                            pass
+                        
+                        try:
+                            buttons = driver.find_elements(By.CSS_SELECTOR, "button")
+                            for button in buttons:
+                                try:
+                                    next_button = button.find_element(By.CSS_SELECTOR, "[aria-label='Next']")
+                                    if next_button:
+                                        button.click()
+                                        break
+                                except:
+                                    pass
+                        except:
+                            pass
         except Exception as e:
             print(e)
         
         # check whatsapp web
         if not query.qualified == False and query.cellphone and len(query.cellphone) in (11, 13):
-            open_tab(driver=driver, search=query.get_whatsapp_link(), index_tab=1)
+            open_tab(driver=driver, search=query.get_whatsapp_link(add_message=False), index_tab=1)
             
             def check_whatsapp():
                 result = False
@@ -401,7 +514,6 @@ def get_instagram_data(modeladmin, request, queryset):
                                 result = True
                 except Exception as e:
                     print(e)
-                
                 try:
                     whatsapp_links = driver.find_elements(By.CSS_SELECTOR, "a")
                     if whatsapp_links and len(whatsapp_links) >= 1:
@@ -430,6 +542,7 @@ def get_instagram_data(modeladmin, request, queryset):
                                 elif is_qualified == False:
                                     query.website = link
                                     query.qualified = False
+                                    print("disqualified from WhatsApp")
                                     break
                                 elif is_linktree:
                                     query.website2 = link
@@ -451,15 +564,15 @@ def get_instagram_data(modeladmin, request, queryset):
             )
             
             close_tab(driver=driver, index_tab=0)
-            
+        
         query.save()
-        if query.qualified == False:
-            print("disqualified: ", query.qualified)
         print("=============================")
-    
-        chuck = (index + 1) % 50 == 0
+
+        len_chunck = 30
+        chunk = (index + 1) % len_chunck == 0
         not_last = index + 1 != len(queryset)
-        if  chuck and not_last: time.sleep(60)
+        if chunk and not_last: time.sleep(60)
+        
     driver.close()
 
 @admin.action(description="Get data from the LinkedIn profile", permissions=["change"])
@@ -848,14 +961,3 @@ def send_whatsapp_message(modeladmin, request, queryset):
         time.sleep(10)
     driver.close()
 
-
-@admin.action(description="Try white", permissions=["change"])
-def action_try_white(modeladmin, request, queryset):
-    def my_test():
-        result = False
-        
-        time.sleep(2)
-        
-        return result
-    
-    try_white(my_test, 2)

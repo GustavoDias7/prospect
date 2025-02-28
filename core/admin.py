@@ -117,16 +117,12 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
             return mark_safe(html)
         else:
             return "-"
-        
-@admin.register(models.Decider)
-class DeciderAdmin(admin.ModelAdmin):
-    list_display = ["id", "name", "phone", "email", "instagram"]
-    search_fields = ["id", "name", "email"]
-    
-@admin.register(models.InstagramContact)
-class InstagramContactAdmin(admin.ModelAdmin):
+
+
+@admin.register(models.BusinessContact)
+class BusinessContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived"]
-    list_display = ["id", "name_", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider__name"]
+    list_display = ["id", "name_", "cellphone", "telephone", "website_", "website2_", "last_post_", "decider__name"]
     actions = [
         actions.get_instagram_data, 
         actions.disqualify, 
@@ -139,9 +135,33 @@ class InstagramContactAdmin(admin.ModelAdmin):
         actions.send_whatsapp_message,
         actions.open_selenium
     ]
-    search_fields = ["id", "username", "website", "cellphone"]
-    autocomplete_fields = ["decider"]
-    form = forms.InstagramContactForm
+    search_fields = ["id", "username", "website", "cellphone", "decider__name"]
+    autocomplete_fields = ["decider", "template"]
+    form = forms.BusinessContactForm
+    change_form_template = 'admin/vacancy_change_form.html'
+    
+    
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        
+        try:
+            business_contact = models.BusinessContact.objects.get(id=object_id)
+            if business_contact.template:
+                template = Template(business_contact.template.message)
+                context = Context({'business_contact': business_contact})
+                rendered_content = template.render(context)
+                extra_context["template"] = rendered_content
+            else:
+                extra_context["template"] = None
+        except ObjectDoesNotExist:
+            extra_context["template"] = None
+        
+        return super().change_view(
+            request,
+            object_id,
+            form_url,
+            extra_context=extra_context,
+        )
     
     def get_form(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
@@ -228,8 +248,103 @@ class InstagramContactAdmin(admin.ModelAdmin):
             else: 
                 return obj.cellphone
         else:
+            return None
+
+
+class BusinessContactInline(admin.StackedInline):
+    model = models.BusinessContact
+    form = forms.BusinessContactForm    
+    
+    def get_formset(self, request, obj=None, **kwargs):
+        help_texts = { "help_texts": {} }
+        business_contact = self.model.objects.get(decider=obj)
+        if business_contact:
+            if business_contact.name:
+                help_text = f"https://duckduckgo.com/?t=ffab&q={business_contact.name}"
+                html = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">duckduckgo</a>'
+                help_texts["help_texts"].update({"name": mark_safe(html)})
+            
+            if business_contact.cellphone:
+                hred = business_contact.get_whatsapp_link(add_message=False)
+                help_text = business_contact.fcellphone()
+                html = f'<a href="{hred}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
+                help_texts["help_texts"].update({"cellphone": mark_safe(html)}) 
+                
+            if business_contact.username:
+                help_text = business_contact.get_instagram_link()
+                html = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
+                help_texts["help_texts"].update({"username": mark_safe(html)}) 
+                
+            kwargs.update(help_texts)
+                
+        return super().get_formset(request, obj, **kwargs)
+            
+  
+@admin.register(models.Decider)
+class DeciderAdmin(admin.ModelAdmin):
+    list_display = ["id", "name_", "phone_", "email", "instagram"]
+    search_fields = ["id", "name", "email"]
+    form = forms.DeciderForm
+    inlines = [BusinessContactInline]
+    
+    def get_form(self, request, obj=None, **kwargs):
+        help_texts = { "help_texts": {} }
+        if obj:
+            if obj.name:
+                help_text1 = f"https://casadosdados.com.br/solucao/cnpj?q={obj.name}"
+                html1 = f'<a href="{help_text1}" target="_blannk" style="font-size: 12px;">casadosdados</a>'
+                help_text2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
+                html2 = f'<a href="{help_text2}" target="_blannk" style="font-size: 12px;">duckduckgo</a>'
+                html = f"{html1} | {html2}"
+                help_texts["help_texts"].update({"name": mark_safe(html)})
+            
+            if obj.phone:
+                href = obj.get_whatsapp_link(add_message=False)
+                help_text = obj.fcellphone()
+                html = f'<a href="{href}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
+                help_texts["help_texts"].update({"phone": mark_safe(html)}) 
+                
+            if obj.instagram:
+                help_text = obj.get_instagram_link()
+                html = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
+                help_texts["help_texts"].update({"instagram": mark_safe(html)}) 
+                
+            kwargs.update(help_texts)
+                
+        return super().get_form(request, obj, **kwargs)
+
+    @admin.display(description='name')
+    def name_(self, obj):
+        if obj.name:
+            link = f"https://casadosdados.com.br/solucao/cnpj?q={obj.name}"
+            html = f'<a href="{link}" target="_blannk">{obj.name}</a>'
+            return mark_safe(html)
+        else:
+            return None
+    
+    @admin.display(description='phone')
+    def phone_(self, obj):
+        if obj.phone:
+            if len(obj.phone) == 13 and int(obj.phone[4]) == 9: 
+                link_number = obj.get_whatsapp_link()
+                inner_text = f"+{obj.phone[0:2]} ({obj.phone[2:4]}) {obj.phone[4]} {obj.phone[5:9]}-{obj.phone[9:13]}"
+                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            if len(obj.phone) == 11 and int(obj.phone[2]) == 9: 
+                link_number = obj.get_whatsapp_link()
+                inner_text = f"({obj.phone[0:2]}) {obj.phone[2]} {obj.phone[3:7]}-{obj.phone[7:11]}"
+                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            elif len(obj.phone) == 9 and int(obj.phone[0]) == 9: 
+                link_number = obj.get_whatsapp_link()
+                inner_text = f"{obj.phone[0:5]}-{obj.phone[5:9]}"
+                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            else: 
+                return obj.phone
+        else:
             return "-"
-        
+    
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]
@@ -341,6 +456,19 @@ class VacancyCategoryAdmin(admin.ModelAdmin):
 @admin.register(models.Template)
 class TemplateAdmin(admin.ModelAdmin):
     search_fields = ["name"]
+    form = forms.TemplateForm
+    
+    
+    def get_form(self, request, obj=None, **kwargs):
+        help_texts = { "help_texts": {} }
+        if obj:
+            if obj.message:
+                max_length = models.Template._meta.get_field('message').max_length
+                help_texts["help_texts"].update({"message": f"Max length: {max_length}"}) 
+                
+            kwargs.update(help_texts)
+                
+        return super().get_form(request, obj, **kwargs)
     
 @admin.register(models.Curriculum)
 class CurriculumAdmin(admin.ModelAdmin):

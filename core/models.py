@@ -36,15 +36,58 @@ class Decider(models.Model):
     phone = models.CharField(max_length=13, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     instagram = models.CharField(max_length=30, null=True, blank=True)
+    address = models.CharField(max_length=200, null=True, blank=True)
     
+    def get_whatsapp_link(self, add_message: bool | None = True):
+        phone = remove_non_numeric(self.phone)
+        
+        if add_message:
+            message = "Olá, tudo bem?"
+            now = datetime.datetime.now(timezone('America/Sao_Paulo'))
+            
+            morning = now.hour >= 6 and now.hour <= 11
+            afternoon = now.hour >= 12 and now.hour <= 17
+            night = now.hour >= 18
+            
+            if morning:
+                message = "Olá, bom dia!"
+            elif afternoon:
+                message = "Olá, boa tarde!"
+            elif night:
+                message = "Olá, boa noite!"
+            
+            return f"https://web.whatsapp.com/send/?phone={phone}&text={message}"
+        else:
+            return f"https://web.whatsapp.com/send/?phone={phone}"
+    
+    def get_instagram_link(self):
+        return f"https://www.instagram.com/{self.instagram}"
+    
+    def get_first_name(self):
+        if self.name:
+            return self.name.split(" ")[0]
+    
+    def fcellphone(self):
+        if self.phone:
+            if len(self.phone) == 13: 
+                return f"+{self.phone[0:2]} ({self.phone[2:4]}) {self.phone[4]} {self.phone[5:9]}-{self.phone[9:13]}"
+            if len(self.phone) == 11 and int(self.phone[2]) == 9: 
+                return f"({self.phone[0:2]}) {self.phone[2]} {self.phone[3:7]}-{self.phone[7:11]}"
+            elif len(self.phone) == 9 and int(self.phone[0]) == 9: 
+                return f"{self.phone[0:5]}-{self.phone[5:9]}"
+            else: 
+                return self.phone
+        else:
+            return None
+            
     def __str__(self):
         if self.name: return self.name
         else: return f"Decider {self.id}"
         
 # class SeleniumDriver(models.Model):
 #     name = models.CharField(max_length=50, null=True, blank=True)
-        
-class InstagramContact(models.Model):
+
+class BusinessContact(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     cellphone = models.CharField(max_length=13, null=True, blank=True)
@@ -59,6 +102,7 @@ class InstagramContact(models.Model):
     last_post = models.DateTimeField(default=None, null=True, blank=True)
     archived = models.BooleanField(default=False)
     menu = models.BooleanField(default=None, null=True, blank=True)
+    template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
     
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.username}"
@@ -135,7 +179,7 @@ class VacancyCategory(models.Model):
 
 class Template(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
-    message = models.TextField(max_length=600, null=True, blank=True)
+    message = models.TextField(max_length=1200, null=True, blank=True)
     
     def __str__(self):
         return self.name
