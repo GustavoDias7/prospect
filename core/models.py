@@ -428,21 +428,14 @@ class Post(models.Model):
                 
             return f"id {self.id}: {short_phrase}"
         else: 
-            return self.id
+            return str(self.id)
 
 
 class PostGenerator(models.Model):
     phrases = models.TextField(max_length=1500)
+    type = models.ForeignKey(PostType, null=True, blank=True, on_delete=models.SET_NULL)
+    generated = models.BooleanField(default=False)
     
     def save(self, *args, **kwargs):
-        
-        phrases = self.phrases.split(";")
-        
-        for phrase in phrases:
-            post = Post()
-            post.phrase = phrase
-            post.variant = PostVariant.objects.order_by("?").first()
-            self.svg = PostSVG.objects.order_by("?").first()
-            post.save()
         
         super().save(*args, **kwargs)

@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import urllib.parse
 from . import models
 from django.template import Context, Template
+from django.http import HttpResponseRedirect
 
 @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -573,6 +574,7 @@ class PostAdmin(admin.ModelAdmin):
 @admin.register(models.PostGenerator)
 class PostGeneratorAdmin(admin.ModelAdmin):
     list_display = ["id"]
+    change_form_template = "admin/post_generator_change_form.html"
     
     class Media:
         js = ('js/admin/post.js',)
@@ -593,6 +595,27 @@ class PostGeneratorAdmin(admin.ModelAdmin):
             extra_context=extra_context,
         )
 
+    def response_change(self, request, obj):
+        if "generate_post" in request.POST and obj and obj.generated != True:
+            try:
+                phrases = obj.phrases.split(";")
+                print(phrases)
+                
+                for phrase in phrases:
+                    if len(phrase) > 0:
+                        post = models.Post()
+                        post.phrase = phrase
+                        post.variant = models.PostVariant.objects.order_by("?").first()
+                        post.svg = models.PostSVG.objects.order_by("?").first()
+                        post.type = obj.type
+                        post.save()
+                
+                obj.generated = True
+                obj.save()
+            except ObjectDoesNotExist:
+                pass
+            return HttpResponseRedirect(".")
+        return super().response_change(request, obj)
 
 @admin.register(models.PostSVG)
 class PostSVGAdmin(admin.ModelAdmin):
