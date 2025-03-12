@@ -6,7 +6,7 @@ from import_export.admin import ImportExportModelAdmin
 from django.core.exceptions import ObjectDoesNotExist
 from bs4 import BeautifulSoup
 import urllib.parse
-from . import models, forms
+from . import models
 from django.template import Context, Template
 
 @admin.register(models.Contact)
@@ -121,8 +121,8 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 @admin.register(models.BusinessContact)
 class BusinessContactAdmin(admin.ModelAdmin):
-    list_filter = ["qualified", "contacted", "archived"]
-    list_display = ["id", "name_", "cellphone", "telephone", "website_", "website2_", "last_post_", "decider__name"]
+    list_filter = ["qualified", "contacted", "archived", "followed"]
+    list_display = ["id", "name_", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider__name"]
     actions = [
         actions.get_instagram_data, 
         actions.disqualify, 
@@ -133,13 +133,14 @@ class BusinessContactAdmin(admin.ModelAdmin):
         actions.not_menu,
         actions.set_contact_quality,
         actions.send_whatsapp_message,
-        actions.open_selenium
+        actions.follow_decider
     ]
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     autocomplete_fields = ["decider", "template"]
-    form = forms.BusinessContactForm
     change_form_template = 'admin/vacancy_change_form.html'
     
+    class Media:
+        js = ('js/admin/instagram_contacts.js',)
     
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
@@ -253,7 +254,6 @@ class BusinessContactAdmin(admin.ModelAdmin):
 
 class BusinessContactInline(admin.StackedInline):
     model = models.BusinessContact
-    form = forms.BusinessContactForm    
     
     def get_formset(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
@@ -282,10 +282,14 @@ class BusinessContactInline(admin.StackedInline):
   
 @admin.register(models.Decider)
 class DeciderAdmin(admin.ModelAdmin):
-    list_display = ["id", "name_", "phone_", "email", "instagram"]
+    list_display = ["id", "name_", "phone_", "email", "instagram_"]
     search_fields = ["id", "name", "email"]
-    form = forms.DeciderForm
+    list_filter = ["followed"]
     inlines = [BusinessContactInline]
+    actions = [actions.follow_decider]
+    
+    class Media:
+        js = ('js/admin/decider.js',)
     
     def get_form(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
@@ -295,7 +299,7 @@ class DeciderAdmin(admin.ModelAdmin):
                 html1 = f'<a href="{help_text1}" target="_blannk" style="font-size: 12px;">casadosdados</a>'
                 help_text2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
                 html2 = f'<a href="{help_text2}" target="_blannk" style="font-size: 12px;">duckduckgo</a>'
-                html = f"{html1} | {html2}"
+                html = f"{html1} | {html2} | <a href='/' id='id_name_copy'>Copy name</a>"
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
             if obj.phone:
@@ -345,6 +349,14 @@ class DeciderAdmin(admin.ModelAdmin):
         else:
             return "-"
     
+    @admin.display(description='instagram')
+    def instagram_(self, obj):
+        if obj.instagram:
+            link = obj.get_instagram_link()
+            html = f'<a href="{link}" target="_blannk">{obj.instagram}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]
@@ -353,8 +365,8 @@ class WebsiteAdmin(admin.ModelAdmin):
 
 @admin.register(models.Vacancy)
 class VacancyAdmin(admin.ModelAdmin):
-    list_filter = ["archived", "contacted"]
-    list_display = ["name", "link", "description", "category", "company"]
+    list_filter = ["archived", "contacted", "category__name"]
+    list_display = ["name", "job_view_", "level", "category", "company", "hiring"]
     autocomplete_fields = ["category", "company", "template", "curriculum", "level"]
     change_form_template = 'admin/vacancy_change_form.html'
     actions = [actions.archive, actions.contacted, actions.open_selenium]
@@ -380,6 +392,15 @@ class VacancyAdmin(admin.ModelAdmin):
             form_url,
             extra_context=extra_context,
         )
+        
+    @admin.display(description='link')
+    def job_view_(self, obj):
+        if obj.job_view:
+            href = f"https://www.linkedin.com/jobs/view/{obj.job_view}/"
+            html = f'<a href="{href}" target="_blannk">Open vacancy</a>'
+            return mark_safe(html)
+        else:
+            return None
 
 @admin.register(models.Company)
 class CompanyAdmin(admin.ModelAdmin):
@@ -453,22 +474,16 @@ class CompanyAdmin(admin.ModelAdmin):
 class VacancyCategoryAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     
+@admin.register(models.VacancyHiring)
+class VacancyHiringAdmin(admin.ModelAdmin):
+    search_fields = ["name"]
+    
 @admin.register(models.Template)
 class TemplateAdmin(admin.ModelAdmin):
     search_fields = ["name"]
-    form = forms.TemplateForm
     
-    
-    def get_form(self, request, obj=None, **kwargs):
-        help_texts = { "help_texts": {} }
-        if obj:
-            if obj.message:
-                max_length = models.Template._meta.get_field('message').max_length
-                help_texts["help_texts"].update({"message": f"Max length: {max_length}"}) 
-                
-            kwargs.update(help_texts)
-                
-        return super().get_form(request, obj, **kwargs)
+    class Media:
+        js = ('js/admin/template.js',)
     
 @admin.register(models.Curriculum)
 class CurriculumAdmin(admin.ModelAdmin):
@@ -493,3 +508,94 @@ class LinkedInContactAdmin(admin.ModelAdmin):
             return mark_safe(html)
         else:
             return "-"
+
+@admin.register(models.PostType)
+class PostTypeAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.Hashtag)
+class HashtagAdmin(admin.ModelAdmin):
+    class Media:
+        js = ('js/admin/hashtag.js',)
+
+@admin.register(models.PostVariant)
+class PostVariantAdmin(admin.ModelAdmin):
+    change_form_template = 'admin/postvariant_change_form.html'
+    
+    class Media:
+        js = ('js/admin/post_variant.js',)
+
+@admin.register(models.Post)
+class PostAdmin(admin.ModelAdmin):
+    change_form_template = 'admin/post_change_form.html'
+    actions = [actions.not_posted]
+    list_display = ["id", "phrase", "posted", "type__name"]
+    fieldsets = (
+        (None, {
+           'fields': ('phrase', 'hashtag', 'posted', 'type')
+        }),
+        ('Images', {
+            'fields': ('variant', 'background_image1', 'background_image2', 'image', 'svg', 'square_area'),
+        }),
+        ('Font', {
+            'fields': ('font_size', 'text_wrap'),
+        }),
+    )
+    class Media:
+        js = ('js/admin/post.js',)
+        
+    def get_form(self, request, obj=None, **kwargs):
+        help_texts = { "help_texts": {} }
+        if obj:
+            if obj.hashtag:
+                help_texts["help_texts"].update({"hashtag": obj.hashtag.content})
+                
+            kwargs.update(help_texts)
+                
+        return super().get_form(request, obj, **kwargs)
+        
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        
+        try:
+            post = self.model.objects.get(id=object_id)
+            extra_context["post"] = post
+        except:
+            extra_context["post"] = None
+        
+        return super().change_view(
+            request,
+            object_id,
+            form_url,
+            extra_context=extra_context,
+        )
+        
+@admin.register(models.PostGenerator)
+class PostGeneratorAdmin(admin.ModelAdmin):
+    list_display = ["id"]
+    
+    class Media:
+        js = ('js/admin/post.js',)
+        
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        
+        try:
+            post = self.model.objects.get(id=object_id)
+            extra_context["post"] = post
+        except:
+            extra_context["post"] = None
+        
+        return super().change_view(
+            request,
+            object_id,
+            form_url,
+            extra_context=extra_context,
+        )
+
+
+@admin.register(models.PostSVG)
+class PostSVGAdmin(admin.ModelAdmin):
+    
+    class Media:
+        js = ('js/admin/post_svg.js',)

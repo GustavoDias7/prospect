@@ -2,6 +2,8 @@ import re
 from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
 import time
+from PIL import Image
+import json, os
 
 def remove_non_numeric(value:str):
     return "".join(e for e in value if e.isdigit())
@@ -167,4 +169,71 @@ def try_white(
             time.sleep(sleep_after)
 
 
-# https://l.instagram.com/?u=http%3A%2F%2Fapi.whatsapp.com%2Fsend%2F%2F%3Fphone%3D5521986292233%26fbclid%3DPAZXh0bgNhZW0CMTEAAaacqRdHB8AthYC0O0H5hJ5vpcGHZvIcSnlnst_DEfaLNhmHQNpHqF_1lZE_aem_EKr1KmhBZE-tvhR5G5OSEA&e=AT2gveyxAIBzRCu7HL6V5swLF8ApnS1BnfnmvgeqyIMHgsUTKBuXVoUT832ovnS-WfWAc3vB59OXQe-k3t41jTr_gEn4ZbZV8XIoMA
+def resize_image(image: Image, max_length: int) -> Image:
+    length = image.size[0] if image.size[0] >= image.size[1] else image.size[1]
+    length = max_length if length >= max_length else length
+    
+    if image.size[0] < image.size[1]:
+        # The image is in portrait mode. Height is bigger than width.
+
+        # This makes the width fit the LENGTH in pixels while conserving the ration.
+        resized_image = image.resize((length, int(image.size[1] * (length / image.size[0]))))
+
+        # Amount of pixel to lose in total on the height of the image.
+        required_loss = (resized_image.size[1] - length)
+
+        # Crop the height of the image so as to keep the center part.
+        resized_image = resized_image.crop(
+            box=(0, required_loss / 2, length, resized_image.size[1] - required_loss / 2))
+
+        # We now have a length*length pixels image.
+        return resized_image
+    else:
+        # This image is in landscape mode or already squared. The width is bigger than the heihgt.
+
+        # This makes the height fit the LENGTH in pixels while conserving the ration.
+        resized_image = image.resize((int(image.size[0] * (length / image.size[1])), length))
+
+        # Amount of pixel to lose in total on the width of the image.
+        required_loss = resized_image.size[0] - length
+
+        # Crop the width of the image so as to keep 1080 pixels of the center part.
+        resized_image = resized_image.crop(
+            box=(required_loss / 2, 0, resized_image.size[0] - required_loss / 2, length))
+
+        # We now have a length*length pixels image.
+        return resized_image
+
+def save_cookies(driver: webdriver.Firefox, filename: str):
+    # Get and store cookies after login
+    cookies = driver.get_cookies()
+
+    # Store cookies in a file
+    with open(f'{filename}.json', 'w') as file:
+        json.dump(cookies, file)
+        
+    print('New Cookies saved successfully')
+
+
+def load_cookies(driver: webdriver.Firefox, filename: str):
+    # Check if cookies file exists
+    if f'{filename}.json' in os.listdir():
+
+        # Load cookies to a vaiable from a file
+        with open(f'{filename}.json', 'r') as file:
+            cookies = json.load(file)
+        
+        driver.delete_all_cookies()
+
+        # Set stored cookies to maintain the session
+        for cookie in cookies:
+            driver.add_cookie(cookie)
+        
+        # driver.refresh() # Refresh Browser after login
+    
+def has_term(term: str, terms: list | tuple, case_sensitive: bool = False) -> bool:
+    def handle_lower(value):
+        new_value = replace_accents(value)
+        return new_value.lower() if case_sensitive == False else new_value
+    return any(handle_lower(item) in handle_lower(term) for item in terms)
+        

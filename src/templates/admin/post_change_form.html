@@ -1,0 +1,26 @@
+{% extends "admin/change_form.html" %}
+{% block submit_buttons_bottom %}
+
+{% if post and post.image %}
+<div class="post-fieldset">Final image</div>
+<img width="600" height="600" src="{{post.image.url}}?{% now "U" %}" alt="{{post.phrase}}">
+{% endif %}
+
+{% if post and post.hashtag and post.phrase %}
+<div class="comment" id="comment">
+{{post.phrase}}
+
+{{post.hashtag.content}}
+</div>
+<button class="copy-comment" id="copy-comment" type="button">Copy comment</button>
+{% endif %}
+
+{{ block.super }}
+{% endblock %}
+
+
+{% block extrastyle %}
+{% load static %}
+{{ block.super }}
+<link href="{% static 'css/admin/post.css' %}?{% now "U" %}" rel="stylesheet">
+{% endblock %}

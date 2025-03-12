@@ -8,14 +8,13 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, has_string_in_list, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_white)
+from prospect.utils import (get_phone, has_string_in_list, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_white, save_cookies, load_cookies)
 from . import models
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.conf import settings
 from prospect import regex
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
-from selenium.webdriver.common.action_chains import ActionChains
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -607,9 +606,11 @@ def get_linkedin_data(modeladmin, request, queryset):
         print("Missing LinkedIn credentials")
         return
     
-    for query in queryset:
+    for index_query, query in enumerate(queryset):
         driver.get(f"https://www.linkedin.com/in/{query.username}/details/experience/")
         time.sleep(3)
+        print("=" * 30)
+        print(f"query {index_query+1}")
         
         try:
             xpath = "//ul/li/div/section/h2/span"
@@ -625,9 +626,10 @@ def get_linkedin_data(modeladmin, request, queryset):
         xpath = "//main/section/div/div/div/ul/li"
         experiences = driver.find_elements(By.XPATH, xpath)
         if experiences:
-            for experience in experiences:
-                print("=============================")
+            for index_experience, experience in enumerate(experiences):
+                print("-" * 30)
                 
+                experience_title_element = None
                 try:
                     selector = "div > div > div:nth-of-type(2) > div > div > div span:nth-of-type(1)"
                     experience_title_element = experience.find_element(By.CSS_SELECTOR, selector)
@@ -638,10 +640,9 @@ def get_linkedin_data(modeladmin, request, queryset):
                     except:
                         print("Experience title not found")
                 
-                experience_title = None
                 if experience_title_element:
                     experience_title = experience_title_element.get_attribute("innerText")
-                    print("experience:", experience_title)
+                    print(f"experience({index_experience+1}):", experience_title)
                     
                     black_list = ("freelance", "suporte", "estágio", "estagiári", "aprendiz", "monitor", "atendente", "auxiliar", "soldado", "assistente", "operador", "vendedor", "studant", "design", "técnico", "php", "java")
                     
@@ -731,7 +732,6 @@ def get_linkedin_data(modeladmin, request, queryset):
                                         company.save()
                                     except Exception as e:
                                         print(e)
-                                print("=============================")
                                     
                                 driver.close()
                                 driver.switch_to.window(driver.window_handles[0])
@@ -961,3 +961,231 @@ def send_whatsapp_message(modeladmin, request, queryset):
         time.sleep(10)
     driver.close()
 
+
+@admin.action(description="Updaload post", permissions=["change"])
+def upload_post(modeladmin, request, queryset):
+    options = Options()
+    # options.add_argument("--headless")
+    driver = webdriver.Firefox(options=options)
+    driver.get("https://www.instagram.com/")
+    sleep = 30
+    time.sleep(sleep)
+    load_cookies(driver, "instagram_cookies")
+    
+    try:
+        form = driver.find_element(By.ID, "loginForm")
+        username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
+        password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+        
+        username.send_keys(settings.INSTAGRAM_USERNAME)
+        password.send_keys(settings.INSTAGRAM_PASSWORD)
+        form.submit()
+        
+        time.sleep(sleep)
+        save_cookies(driver, "instagram_cookies")
+    except:
+        try:
+            form = driver.find_element(By.ID, "login_form")
+            username = driver.find_element(By.CSS_SELECTOR, "input[name='email']")
+            password = driver.find_element(By.CSS_SELECTOR, "input[name='pass']")
+            
+            username.send_keys(settings.INSTAGRAM_USERNAME)
+            password.send_keys(settings.INSTAGRAM_PASSWORD)
+            form.submit()
+            
+            time.sleep(sleep)
+            save_cookies(driver, "instagram_cookies")
+        except:
+            pass
+    
+    time.sleep(sleep/2)
+    driver.get(f"https://www.instagram.com/{settings.INSTAGRAM_USERNAME}")
+    time.sleep(sleep)
+    
+    try:
+        body = driver.find_element(By.TAG_NAME, "body")
+        if body:
+            body_html = body.get_attribute("innerHTML")
+            if "Choose a way to confirm it’s you" in body_html:
+                input("Press enter to continue")
+    except Exception as e:
+        pass
+        # print("Confirm it's you:", e)
+    
+    for index, query in enumerate(queryset):
+        try:
+            # open new post option
+            role_links = driver.find_elements(By.CSS_SELECTOR, "[role='link']")
+            if role_links and len(role_links) >= 1:
+                for role_link in role_links:
+                    try:
+                        new_post = role_link.find_element(By.CSS_SELECTOR, "[aria-label='New post']")
+                        if new_post:
+                            role_link.click()
+                            time.sleep(sleep / 2)
+                            break
+                    except Exception as e:
+                        pass
+                        # print("post option", e)
+            
+            # click post open
+            role_links = driver.find_elements(By.CSS_SELECTOR, "[role='link']")
+            if role_links and len(role_links) >= 1:
+                for role_link in role_links:
+                    try:
+                        post = role_link.find_element(By.CSS_SELECTOR, "[aria-label='Post']")
+                        if post:
+                            role_link.click()
+                            time.sleep(sleep / 2)
+                            break
+                    except Exception as e:
+                        pass
+                        # print("post", e)
+            
+            # set image path to the input file
+            try:
+                file_input = driver.find_element(By.CSS_SELECTOR, 'input[type="file"]')
+                file_input.send_keys(query.image.path)
+                time.sleep(2)
+            except Exception as e:
+                pass
+                # print("file_input", e)
+            
+            # click in the next button
+            role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+            if role_buttons and len(role_buttons) >= 1:
+                for role_button in role_buttons:
+                    try:
+                        innerText = role_button.get_attribute("innerText")
+                        if innerText == "Next":
+                            role_button.click()
+                            time.sleep(sleep / 2)
+                            break
+                    except Exception as e:
+                        pass
+                        # print("next button", e)
+                        
+            # click in the next button again
+            role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+            if role_buttons and len(role_buttons) >= 1:
+                for role_button in role_buttons:
+                    try:
+                        innerText = role_button.get_attribute("innerText")
+                        if innerText == "Next":
+                            role_button.click()
+                            time.sleep(sleep / 2)
+                            break
+                    except Exception as e:
+                        pass
+                        # print("next button", e)
+                        
+            # click in the next button
+            try:
+                caption = driver.find_element(By.CSS_SELECTOR, "[aria-label='Write a caption...']")
+                if caption:
+                    try:
+                        caption.click()
+                        for letter in query.phrase:
+                            caption.send_keys(letter)
+                            time.sleep(0.2)
+                        for letter in [0,1,2,3,4,5]:
+                            caption.send_keys("\n")
+                            time.sleep(0.2)
+                        for letter in query.hashtag.content:
+                            caption.send_keys(letter)
+                            time.sleep(0.2)
+                    except Exception as e:
+                        pass
+                        # print("next button", e)
+            except Exception as e:
+                pass
+                # print(e)
+            input("Press enter to continue")
+                
+            # click in the share button
+            # role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+            # if role_buttons and len(role_buttons) >= 1:
+            #     for role_button in role_buttons:
+            #         try:
+            #             innerText = role_button.get_attribute("innerText")
+            #             if innerText == "Share":
+            #                 role_button.click()
+            #                 time.sleep(2)
+            #                 break
+            #         except Exception as e:
+            #             pass
+            #             # print("next button", e)
+            
+        except Exception as e:
+            pass
+            # print(e)
+        query.posted = True
+        query.save()
+        
+        if index + 1 != len(queryset): time.sleep(sleep)
+        
+        
+    # bot.logout()
+    
+
+@admin.action(description="Testing cookies", permissions=["change"])
+def test_cookies(modeladmin, request, queryset):
+    options = Options()
+    driver = webdriver.Firefox(options=options)
+    driver.set_window_size(652, 768 - 20)
+    driver.set_window_position(0, 0)
+    
+    driver.get("https://www.instagram.com/")
+    
+    time.sleep(10)
+    
+    load_cookies(driver, "instagram_cookies")
+    
+    try:
+        form = driver.find_element(By.ID, "loginForm")
+        username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
+        password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+        
+        username.send_keys(settings.INSTAGRAM_USERNAME)
+        password.send_keys(settings.INSTAGRAM_PASSWORD)
+        form.submit()
+        
+        time.sleep(10)
+        save_cookies(driver, "instagram_cookies")
+    except:
+        try:
+            form = driver.find_element(By.ID, "login_form")
+            username = driver.find_element(By.CSS_SELECTOR, "input[name='email']")
+            password = driver.find_element(By.CSS_SELECTOR, "input[name='pass']")
+            
+            username.send_keys(settings.INSTAGRAM_USERNAME)
+            password.send_keys(settings.INSTAGRAM_PASSWORD)
+            form.submit()
+            
+            time.sleep(10)
+            save_cookies(driver, "linkedin_cookies")
+        except:
+            pass
+        
+    for index, query in enumerate(queryset):
+        pass
+
+
+@admin.action(description="Follow decider", permissions=["change"])
+def follow_decider(modeladmin, request, queryset):
+    
+    for index, query in enumerate(queryset):
+        query.followed = True
+        query.save()
+        
+@admin.action(description="Resave", permissions=["change"])
+def resave(modeladmin, request, queryset):
+    
+    for index, query in enumerate(queryset):
+        query.save()
+        
+@admin.action(description="Not posted", permissions=["change"])
+def not_posted(modeladmin, request, queryset):
+    for query in queryset:
+        query.posted = False
+        query.save()

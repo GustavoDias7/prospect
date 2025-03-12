@@ -2,6 +2,15 @@ from django.db import models
 from prospect.utils import remove_non_numeric
 import datetime
 from pytz import timezone
+from PIL import Image, ImageFont, ImageDraw
+import requests
+from io import BytesIO
+import textwrap
+from prospect.utils import resize_image
+import os
+from django.conf import settings
+import cairosvg
+import re
 
 # Create your models here.
 class Contact(models.Model):
@@ -37,6 +46,7 @@ class Decider(models.Model):
     email = models.EmailField(null=True, blank=True)
     instagram = models.CharField(max_length=30, null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
+    followed = models.BooleanField(default=False)
     
     def get_whatsapp_link(self, add_message: bool | None = True):
         phone = remove_non_numeric(self.phone)
@@ -103,6 +113,7 @@ class BusinessContact(models.Model):
     archived = models.BooleanField(default=False)
     menu = models.BooleanField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
+    followed = models.BooleanField(default=False)
     
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.username}"
@@ -191,6 +202,12 @@ class Curriculum(models.Model):
     def __str__(self):
         return self.name
 
+class VacancyHiring(models.Model):
+    name = models.CharField(max_length=50, null=True, blank=True)
+    
+    def __str__(self):
+        return self.name
+
 class VacancyLevel(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     
@@ -199,10 +216,10 @@ class VacancyLevel(models.Model):
 
 class Vacancy(models.Model):
     name = models.CharField(max_length=150)
-    link = models.URLField(max_length=200, null=True, blank=True)
+    job_view = models.CharField(max_length=200, unique=True, null=True, blank=True)
     description = models.TextField(max_length=600, null=True, blank=True)
-    remote = models.BooleanField(default=False)
-    level = models.ForeignKey(VacancyLevel, null=True, on_delete=models.SET_NULL)
+    hiring = models.ForeignKey(VacancyHiring, null=True, on_delete=models.SET_NULL)
+    level = models.ForeignKey(VacancyLevel, null=True, blank=True, on_delete=models.SET_NULL)
     salary = models.SmallIntegerField(default=0)
     company = models.ForeignKey("Company", null=True, on_delete=models.SET_NULL)
     category = models.ForeignKey(VacancyCategory, null=True, on_delete=models.SET_NULL)
@@ -247,3 +264,185 @@ class Company(models.Model):
     
     def __str__(self):
         return self.name
+    
+class PostSVG(models.Model):
+    name = models.CharField(max_length=30)
+    content = models.TextField(max_length=1500)
+    
+    def __str__(self):
+        if self.name: return self.name
+        else: return self.id
+    
+class PostType(models.Model):
+    name = models.CharField(max_length=30)
+    
+    def __str__(self):
+        if self.name: return self.name
+        else: return self.id
+        
+class Hashtag(models.Model):
+    name = models.CharField(max_length=30)
+    content = models.TextField(max_length=150)
+    
+    def __str__(self):
+        if self.name: return self.name
+        else: return self.id
+    
+class PostVariant(models.Model):
+    name = models.CharField(max_length=30)
+    background_color = models.CharField(max_length=6)
+    text_color = models.CharField(max_length=6)
+    font_family = models.CharField(max_length=200)
+    
+    def __str__(self):
+        if self.name: return self.name
+        else: return self.id
+
+class Post(models.Model):
+    phrase = models.TextField(max_length=150)
+    variant = models.ForeignKey(PostVariant, null=True, on_delete=models.SET_NULL)
+    hashtag = models.ForeignKey(Hashtag, null=True, on_delete=models.SET_NULL)
+    posted = models.BooleanField(default=False)
+    background_image1 = models.ImageField(null=True, blank=True)
+    background_image2 = models.ImageField(null=True, blank=True)
+    image = models.ImageField(null=True, blank=True)
+    type = models.ForeignKey(PostType, null=True, blank=True, on_delete=models.SET_NULL)
+    font_size = models.PositiveSmallIntegerField(default=64)
+    square_area = models.PositiveSmallIntegerField(default=1080)
+    text_wrap = models.PositiveSmallIntegerField(default=30)
+    svg = models.ForeignKey(PostSVG, null=True, blank=True, on_delete=models.SET_NULL)
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+        req = requests.get(self.variant.font_family)
+            
+        img = Image.new(
+            "RGBA",
+            (self.square_area, self.square_area),
+            f"#{self.variant.background_color}"
+        )
+        
+        if bool(self.background_image1) and bool(self.background_image2) == False:
+            background_image1 = Image.open(self.background_image1)
+            
+            background_image1 = resize_image(background_image1, self.square_area)
+            
+            overlay_color = "#222222"
+            overlay_img = Image.new("RGBA", (self.square_area, self.square_area), overlay_color)
+            img.paste(background_image1, (0, 0)) 
+            
+            img = Image.blend(overlay_img, img, alpha=0.3)
+        elif bool(self.background_image1) and bool(self.background_image2):
+            background_image1 = Image.open(self.background_image1)
+            background_image2 = Image.open(self.background_image2)
+            
+            background_image1 = resize_image(background_image1, self.square_area)
+            background_image2 = resize_image(background_image2, self.square_area)
+            
+            crop_image = {
+                "left": self.square_area / 4,
+                "top": 0,
+                "right": 3 * (self.square_area / 4),
+                "bottom": self.square_area,
+            }
+            
+            background_image1 = background_image1.crop(tuple(crop_image.values()))
+            background_image2 = background_image2.crop(tuple(crop_image.values()))
+            
+            overlay_color = "#222222"
+            overlay_img = Image.new("RGBA", (self.square_area, self.square_area), overlay_color)
+            img.paste(background_image1, (0, 0)) 
+            img.paste(background_image2, (int(self.square_area/2), 0))
+            
+            img = Image.blend(overlay_img, img, alpha=0.3)
+        else:
+            if self.svg == None:
+                self.svg = PostSVG.objects.order_by("?").first()
+            pattern = r'(fill|stroke)="#[A-Fa-f0-9]{6}"'
+            replacement = f"{self.variant.text_color}"
+            new_svg_template = re.sub(pattern, lambda m: f'{m.group(1)}="#{replacement}"', self.svg.content)
+            filelike_obj = BytesIO(cairosvg.svg2png(new_svg_template, background_color=f"#{self.variant.background_color}"))
+            background_template = Image.open(filelike_obj)
+            background_template = resize_image(background_template, self.square_area)
+            img.paste(background_template, (0, 0))
+            
+        draw = ImageDraw.Draw(img)
+        
+        line_height = 0 # line_height
+        
+        main_text = "\n".join(textwrap.wrap(self.phrase, width=self.text_wrap))
+        main_text_font = ImageFont.truetype(BytesIO(req.content), size=self.font_size)
+        main_text_draw_point = (self.square_area/2, self.square_area/2) # x / y
+        
+        draw.text(
+            main_text_draw_point, 
+            main_text, 
+            spacing=line_height, 
+            anchor='mm', 
+            fill=f"#{self.variant.text_color}", 
+            font=main_text_font, 
+            align="center"
+        )
+        
+        # username_font = ImageFont.truetype(BytesIO(req.content), size=40)
+        # username_draw_point = (self.square_area/2, 1000) # x / y
+        # draw.text(
+        #     username_draw_point, 
+        #     f"Curta e compartilhe", 
+        #     spacing=line_height, 
+        #     anchor='mm', 
+        #     fill=f"#{self.variant.text_color}", 
+        #     font=username_font, 
+        #     align="center"
+        # )
+        
+        image_name = f'post-{self.id}.png'
+        media_path = f"./media/{image_name}"
+        img.save(media_path)
+        
+        try:
+            if bool(self.background_image1):
+                os.remove(self.background_image1.path)
+                self.background_image1 = None
+            
+            if bool(self.background_image2):
+                os.remove(self.background_image2.path)
+                self.background_image2 = None
+        except OSError as e:
+            print(e)
+
+        self.image = image_name
+        
+        super().save(*args, **kwargs)
+        
+    def __str__(self):
+        if self.phrase:
+            short_phrase = ""
+            
+            length = 10
+            if len(self.phrase.split(" ")) > length:
+                short_phrase = " ".join(self.phrase.split(" ")[:length]) + "..."
+            else:
+                short_phrase = " ".join(self.phrase.split(" "))
+                
+            return f"id {self.id}: {short_phrase}"
+        else: 
+            return self.id
+
+
+class PostGenerator(models.Model):
+    phrases = models.TextField(max_length=1500)
+    
+    def save(self, *args, **kwargs):
+        
+        phrases = self.phrases.split(";")
+        
+        for phrase in phrases:
+            post = Post()
+            post.phrase = phrase
+            post.variant = PostVariant.objects.order_by("?").first()
+            self.svg = PostSVG.objects.order_by("?").first()
+            post.save()
+        
+        super().save(*args, **kwargs)

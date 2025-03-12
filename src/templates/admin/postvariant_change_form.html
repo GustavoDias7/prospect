@@ -1,0 +1,7 @@
+{% extends "admin/change_form.html" %}
+
+{% block extrastyle %}
+{% load static %}
+{{ block.super }}
+<link href="{% static 'css/admin/post_variant.css' %}?{% now "U" %}" rel="stylesheet">
+{% endblock %}
