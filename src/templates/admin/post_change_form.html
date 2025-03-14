@@ -3,7 +3,7 @@
 
 {% if post and post.image %}
 <div class="post-fieldset">Final image</div>
-<img width="600" height="600" src="{{post.image.url}}?{% now "U" %}" alt="{{post.phrase}}">
+<img width="400" src="{{post.image.url}}?{% now "U" %}" alt="{{post.phrase}}">
 {% endif %}
 
 {% if post and post.hashtag and post.phrase %}
@@ -12,12 +12,32 @@
 
 {{post.hashtag.content}}
 </div>
-<button class="copy-comment" id="copy-comment" type="button">Copy comment</button>
 {% endif %}
+
+<div class="submit-row">
+    <input  class="copy-comment" id="copy-comment" type="button" value="Copy comment">
+    <input 
+        type="submit"
+        name="preview"
+        id="preview" 
+        value="Preview image" 
+    />
+    <input 
+        type="submit"
+        name="generate_image_post"
+        id="generate_image_post" 
+        value="Generate image post" 
+    />
+    <input 
+        type="submit"
+        name="generate_image_audio_post"
+        id="generate_image_audio_post" 
+        value="Generate post with image and audio" 
+    />
+</div>
 
 {{ block.super }}
 {% endblock %}
-
 
 {% block extrastyle %}
 {% load static %}

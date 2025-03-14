@@ -9,6 +9,15 @@ import urllib.parse
 from . import models
 from django.template import Context, Template
 from django.http import HttpResponseRedirect
+from PIL import Image, ImageFont, ImageDraw
+import requests
+from io import BytesIO
+import textwrap
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste
+import os
+from django.conf import settings
+import cairosvg
+import re
 
 @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -536,7 +545,7 @@ class PostAdmin(admin.ModelAdmin):
            'fields': ('phrase', 'hashtag', 'posted', 'type')
         }),
         ('Images', {
-            'fields': ('variant', 'background_image1', 'background_image2', 'image', 'svg', 'square_area'),
+            'fields': ('variant', 'background_image1', 'background_image2', 'image', 'svg', 'width', 'height'),
         }),
         ('Font', {
             'fields': ('font_size', 'text_wrap'),
@@ -570,6 +579,122 @@ class PostAdmin(admin.ModelAdmin):
             form_url,
             extra_context=extra_context,
         )
+        
+    def response_change(self, request, obj: models.Post):
+        if "generate_image_post" or "preview" in request.POST and obj:
+            is_preview = request.POST.get("preview", None) != None
+            req = requests.get(obj.variant.font_family)
+            
+            if bool(obj.background_image1) and bool(obj.background_image2) == False:
+                img_height = 1440
+                img_background = Image.new("RGBA", (obj.width, img_height), "#ffffff") #3:4 
+                draw_background = ImageDraw.Draw(img_background)
+                
+                if is_preview:
+                    loss = img_height - obj.width
+                    draw_background.rectangle(xy=((0, loss/2),(obj.width-1, obj.width + loss / 2)), outline="red")
+                
+                padding = 32
+                gap_y = 64
+                
+                main_text = "\n".join(textwrap.wrap(obj.phrase, width=obj.text_wrap)).replace(r'\n', '\n')
+                main_font = ImageFont.truetype(BytesIO(req.content), size=obj.font_size)
+                img_text = text_to_image(
+                    draw=draw_background, 
+                    text=main_text,
+                    fill=f"#222", 
+                    font=main_font, 
+                    align="left",
+                    outline=is_preview
+                )
+                
+                image1 = Image.open(obj.background_image1)
+                image1 = crop_horizontal_image(
+                    image=image1, 
+                    aspect_ratio=(4, 3), 
+                    resize_width=obj.width - padding * 2
+                )
+                
+                grouped_image = group_vertically(images=(img_text, image1,), gap=gap_y)
+                center_paste(img_background, grouped_image, x=True, y=True)
+            else:
+                img_background = Image.new(
+                    "RGBA",
+                    (obj.width, obj.width),
+                    f"#{obj.variant.background_color}"
+                )
+            
+                if bool(obj.background_image1) and bool(obj.background_image2):
+                    image1 = Image.open(obj.background_image1)
+                    background_image2 = Image.open(obj.background_image2)
+                    
+                    image1 = resize_image(image1, obj.width)
+                    background_image2 = resize_image(background_image2, obj.width)
+                    
+                    crop_image = {
+                        "left": obj.width / 4,
+                        "top": 0,
+                        "right": 3 * (obj.width / 4),
+                        "bottom": obj.width,
+                    }
+                    
+                    image1 = image1.crop(tuple(crop_image.values()))
+                    background_image2 = background_image2.crop(tuple(crop_image.values()))
+                    
+                    overlay_color = "#222222"
+                    overlay_img = Image.new("RGBA", (obj.width, obj.width), overlay_color)
+                    img_background.paste(image1, (0, 0)) 
+                    img_background.paste(background_image2, (int(obj.width/2), 0))
+                    
+                    img_background = Image.blend(overlay_img, img_background, alpha=0.3)
+                else:
+                    if obj.svg == None:
+                        obj.svg = models.PostSVG.objects.order_by("?").first()
+                    pattern = r'(fill|stroke)="#[A-Fa-f0-9]{6}"'
+                    replacement = f"{obj.variant.text_color}"
+                    new_svg_template = re.sub(pattern, lambda m: f'{m.group(1)}="#{replacement}"', obj.svg.content)
+                    filelike_obj = BytesIO(cairosvg.svg2png(new_svg_template, background_color=f"#{obj.variant.background_color}"))
+                    background_template = Image.open(filelike_obj)
+                    background_template = resize_image(background_template, obj.width)
+                    img_background.paste(background_template, (0, 0))
+                
+                draw_background = ImageDraw.Draw(img_background)
+                
+                line_height = 0 # line_height
+                
+                main_text = "\n".join(textwrap.wrap(obj.phrase, width=obj.text_wrap))
+                main_font = ImageFont.truetype(BytesIO(req.content), size=obj.font_size)
+                main_text_draw_point = (obj.width/2, obj.width/2) # x / y
+                
+                draw_background.text(
+                    main_text_draw_point, 
+                    main_text, 
+                    spacing=line_height, 
+                    anchor='mm', 
+                    fill=f"#{obj.variant.text_color}", 
+                    font=main_font, 
+                    align="center"
+                )
+            
+            image_name = f'post-{obj.id}.png'
+            media_path = f"./media/{image_name}"
+            img_background.save(media_path)
+            
+            if not is_preview:
+                try:
+                    if bool(obj.background_image1):
+                        os.remove(obj.background_image1.path)
+                        obj.background_image1 = None
+                    
+                    if bool(obj.background_image2):
+                        os.remove(obj.background_image2.path)
+                        obj.background_image2 = None
+                except OSError as e:
+                    print(e)
+
+            obj.image = image_name
+            return HttpResponseRedirect(".")
+        return super().response_change(request, obj)
         
 @admin.register(models.PostGenerator)
 class PostGeneratorAdmin(admin.ModelAdmin):

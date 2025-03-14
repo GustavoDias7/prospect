@@ -308,112 +308,12 @@ class Post(models.Model):
     image = models.ImageField(null=True, blank=True)
     type = models.ForeignKey(PostType, null=True, blank=True, on_delete=models.SET_NULL)
     font_size = models.PositiveSmallIntegerField(default=64)
-    square_area = models.PositiveSmallIntegerField(default=1080)
+    width = models.PositiveSmallIntegerField(default=1080)
+    height = models.PositiveSmallIntegerField(default=1080)
     text_wrap = models.PositiveSmallIntegerField(default=30)
     svg = models.ForeignKey(PostSVG, null=True, blank=True, on_delete=models.SET_NULL)
     
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        
-        req = requests.get(self.variant.font_family)
-            
-        img = Image.new(
-            "RGBA",
-            (self.square_area, self.square_area),
-            f"#{self.variant.background_color}"
-        )
-        
-        if bool(self.background_image1) and bool(self.background_image2) == False:
-            background_image1 = Image.open(self.background_image1)
-            
-            background_image1 = resize_image(background_image1, self.square_area)
-            
-            overlay_color = "#222222"
-            overlay_img = Image.new("RGBA", (self.square_area, self.square_area), overlay_color)
-            img.paste(background_image1, (0, 0)) 
-            
-            img = Image.blend(overlay_img, img, alpha=0.3)
-        elif bool(self.background_image1) and bool(self.background_image2):
-            background_image1 = Image.open(self.background_image1)
-            background_image2 = Image.open(self.background_image2)
-            
-            background_image1 = resize_image(background_image1, self.square_area)
-            background_image2 = resize_image(background_image2, self.square_area)
-            
-            crop_image = {
-                "left": self.square_area / 4,
-                "top": 0,
-                "right": 3 * (self.square_area / 4),
-                "bottom": self.square_area,
-            }
-            
-            background_image1 = background_image1.crop(tuple(crop_image.values()))
-            background_image2 = background_image2.crop(tuple(crop_image.values()))
-            
-            overlay_color = "#222222"
-            overlay_img = Image.new("RGBA", (self.square_area, self.square_area), overlay_color)
-            img.paste(background_image1, (0, 0)) 
-            img.paste(background_image2, (int(self.square_area/2), 0))
-            
-            img = Image.blend(overlay_img, img, alpha=0.3)
-        else:
-            if self.svg == None:
-                self.svg = PostSVG.objects.order_by("?").first()
-            pattern = r'(fill|stroke)="#[A-Fa-f0-9]{6}"'
-            replacement = f"{self.variant.text_color}"
-            new_svg_template = re.sub(pattern, lambda m: f'{m.group(1)}="#{replacement}"', self.svg.content)
-            filelike_obj = BytesIO(cairosvg.svg2png(new_svg_template, background_color=f"#{self.variant.background_color}"))
-            background_template = Image.open(filelike_obj)
-            background_template = resize_image(background_template, self.square_area)
-            img.paste(background_template, (0, 0))
-            
-        draw = ImageDraw.Draw(img)
-        
-        line_height = 0 # line_height
-        
-        main_text = "\n".join(textwrap.wrap(self.phrase, width=self.text_wrap))
-        main_text_font = ImageFont.truetype(BytesIO(req.content), size=self.font_size)
-        main_text_draw_point = (self.square_area/2, self.square_area/2) # x / y
-        
-        draw.text(
-            main_text_draw_point, 
-            main_text, 
-            spacing=line_height, 
-            anchor='mm', 
-            fill=f"#{self.variant.text_color}", 
-            font=main_text_font, 
-            align="center"
-        )
-        
-        # username_font = ImageFont.truetype(BytesIO(req.content), size=40)
-        # username_draw_point = (self.square_area/2, 1000) # x / y
-        # draw.text(
-        #     username_draw_point, 
-        #     f"Curta e compartilhe", 
-        #     spacing=line_height, 
-        #     anchor='mm', 
-        #     fill=f"#{self.variant.text_color}", 
-        #     font=username_font, 
-        #     align="center"
-        # )
-        
-        image_name = f'post-{self.id}.png'
-        media_path = f"./media/{image_name}"
-        img.save(media_path)
-        
-        try:
-            if bool(self.background_image1):
-                os.remove(self.background_image1.path)
-                self.background_image1 = None
-            
-            if bool(self.background_image2):
-                os.remove(self.background_image2.path)
-                self.background_image2 = None
-        except OSError as e:
-            print(e)
-
-        self.image = image_name
-        
         super().save(*args, **kwargs)
         
     def __str__(self):

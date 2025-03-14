@@ -2,7 +2,7 @@ import re
 from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
 import time
-from PIL import Image
+from PIL import Image, ImageFont, ImageDraw
 import json, os
 
 def remove_non_numeric(value:str):
@@ -169,9 +169,9 @@ def try_white(
             time.sleep(sleep_after)
 
 
-def resize_image(image: Image, max_length: int) -> Image:
-    length = image.size[0] if image.size[0] >= image.size[1] else image.size[1]
-    length = max_length if length >= max_length else length
+def resize_image(image: Image.Image, length: int) -> Image.Image:
+    # length = image.size[0] if image.size[0] >= image.size[1] else image.size[1]
+    # length = max_length if length >= max_length else length
     
     if image.size[0] < image.size[1]:
         # The image is in portrait mode. Height is bigger than width.
@@ -179,7 +179,6 @@ def resize_image(image: Image, max_length: int) -> Image:
         # This makes the width fit the LENGTH in pixels while conserving the ration.
         resized_image = image.resize((length, int(image.size[1] * (length / image.size[0]))))
 
-        # Amount of pixel to lose in total on the height of the image.
         required_loss = (resized_image.size[1] - length)
 
         # Crop the height of the image so as to keep the center part.
@@ -203,6 +202,113 @@ def resize_image(image: Image, max_length: int) -> Image:
 
         # We now have a length*length pixels image.
         return resized_image
+    
+def crop_horizontal_image(
+        image: Image.Image, 
+        aspect_ratio: tuple[int, int],
+        resize_width: int | None = None
+    ) -> Image.Image:
+    
+    x_axis = image.size[0]
+    y_axis = image.size[1]
+    
+    w_aspect_ratio = aspect_ratio[0]
+    y_aspect_ratio = aspect_ratio[1]
+    
+    # check horizontal dementions
+    if x_axis > y_axis:
+        # get the height
+        # calculate the height -> 16 . x = width . 9 -> x = width . 9 / 16
+        height = (x_axis * y_aspect_ratio) / w_aspect_ratio
+        cropped_image = None
+        if height < y_axis:
+            required_loss = y_axis - height
+            cropped_image = image.crop(
+                box=(0, required_loss / 2, x_axis, y_axis - required_loss / 2)
+            )
+        elif height > y_axis:
+            # calculate the width 16 . height = x . 9
+            width = (y_axis * w_aspect_ratio) / y_aspect_ratio
+            required_loss = x_axis - width
+            cropped_image = image.crop(
+                box=(required_loss / 2, 0, x_axis - required_loss / 2, y_axis)
+            )
+        else:
+            cropped_image = image
+        
+        resizes_image = cropped_image.resize((
+            int(resize_width),
+            int((resize_width * y_aspect_ratio) / w_aspect_ratio)
+        ))
+        
+        return resizes_image
+    else:
+        return image
+    
+def text_to_image(
+        draw: ImageDraw.ImageDraw, 
+        text: str, 
+        fill: str, 
+        font: ImageFont.ImageFont, 
+        align: str,
+        outline: bool = False
+    ) -> Image.Image:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    img = Image.new("RGBA", (bbox[2], bbox[3]), "#00000000")
+    draw = ImageDraw.Draw(img)
+    if outline:
+        draw.rectangle(xy=((0, 0), (bbox[2]-1, bbox[3]-1)), outline="red")
+    draw.text(
+        (0, 0), 
+        text=text,
+        # anchor='mm', 
+        fill=fill, 
+        font=font, 
+        align=align
+    )
+    return img
+    
+def group_vertically(images: tuple[Image.Image], gap) -> Image.Image:
+    # get the greater x and y
+    greater_x = 0
+    max_y = gap
+    for image in images:
+        if image.size[0] > greater_x:
+            greater_x = image.size[0]
+        max_y = max_y + image.size[1]
+    
+    img = Image.new("RGBA", (greater_x, max_y), "#00000000")
+    
+    paste_y = 0
+    for image in images:
+        img.paste(image, (0, paste_y))
+        paste_y = paste_y + image.size[1] + gap
+    
+    return img
+
+def center_paste(
+        container: Image.Image, 
+        child: Image.Image, 
+        x: bool | int, 
+        y: bool | int
+    ) -> Image.Image:
+    result_x = 0
+    result_y = 0
+    
+    if type(x) == bool and x:
+        container_x = container.size[0]
+        child_x = child.size[0]
+        result_x = int((container_x - child_x) / 2)
+    elif type(x) == int and x > 0:
+        result_x = x
+    if  type(y) == bool and y:
+        container_y = container.size[1]
+        child_y = child.size[1]
+        result_y = int((container_y - child_y) / 2)
+    elif type(y) == int and y > 0:
+        result_y = y
+        
+    return container.paste(child, (result_x, result_y), child)
 
 def save_cookies(driver: webdriver.Firefox, filename: str):
     # Get and store cookies after login
