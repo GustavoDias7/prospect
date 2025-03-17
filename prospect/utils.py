@@ -216,7 +216,7 @@ def crop_horizontal_image(
     y_aspect_ratio = aspect_ratio[1]
     
     # check horizontal dementions
-    if x_axis > y_axis:
+    if x_axis >= y_axis:
         # get the height
         # calculate the height -> 16 . x = width . 9 -> x = width . 9 / 16
         height = (x_axis * y_aspect_ratio) / w_aspect_ratio
@@ -342,4 +342,7 @@ def has_term(term: str, terms: list | tuple, case_sensitive: bool = False) -> bo
         new_value = replace_accents(value)
         return new_value.lower() if case_sensitive == False else new_value
     return any(handle_lower(item) in handle_lower(term) for item in terms)
-        
+
+def get_dimentions(aspect_ratio: str, width: int):
+    numerator, denominator = aspect_ratio.split(":")
+    return (float(width), width * int(denominator) / int(numerator))

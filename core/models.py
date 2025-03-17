@@ -9,7 +9,7 @@ import textwrap
 from prospect.utils import resize_image
 import os
 from django.conf import settings
-import cairosvg
+from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS
 import re
 
 # Create your models here.
@@ -298,18 +298,31 @@ class PostVariant(models.Model):
         if self.name: return self.name
         else: return self.id
 
+class PostAudio(models.Model):
+    name = models.CharField(max_length=30)
+    file = models.FileField()
+    
+    def __str__(self):
+        if self.name: return self.name
+        else: return self.id
+
 class Post(models.Model):
     phrase = models.TextField(max_length=150)
     variant = models.ForeignKey(PostVariant, null=True, on_delete=models.SET_NULL)
     hashtag = models.ForeignKey(Hashtag, null=True, on_delete=models.SET_NULL)
     posted = models.BooleanField(default=False)
-    background_image1 = models.ImageField(null=True, blank=True)
-    background_image2 = models.ImageField(null=True, blank=True)
+    image1 = models.ImageField(null=True, blank=True)
+    aspect_ratio_image1 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
+    image2 = models.ImageField(null=True, blank=True)
+    aspect_ratio_image2 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
     image = models.ImageField(null=True, blank=True)
+    aspect_ratio_image = models.CharField(max_length=4, choices=VERTICAL_ASPECT_RATIOS, default="3:4", null=True, blank=True)
+    audio = models.ForeignKey(PostAudio, null=True, blank=True, on_delete=models.SET_NULL)
+    video = models.FileField(null=True, blank=True)
+    video_duration = models.PositiveSmallIntegerField(default=10)
     type = models.ForeignKey(PostType, null=True, blank=True, on_delete=models.SET_NULL)
     font_size = models.PositiveSmallIntegerField(default=64)
     width = models.PositiveSmallIntegerField(default=1080)
-    height = models.PositiveSmallIntegerField(default=1080)
     text_wrap = models.PositiveSmallIntegerField(default=30)
     svg = models.ForeignKey(PostSVG, null=True, blank=True, on_delete=models.SET_NULL)
     

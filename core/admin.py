@@ -13,11 +13,12 @@ from PIL import Image, ImageFont, ImageDraw
 import requests
 from io import BytesIO
 import textwrap
-from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste, get_dimentions
 import os
 from django.conf import settings
 import cairosvg
 import re
+from moviepy.editor import AudioFileClip, ImageClip
 
 @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -531,9 +532,12 @@ class HashtagAdmin(admin.ModelAdmin):
 @admin.register(models.PostVariant)
 class PostVariantAdmin(admin.ModelAdmin):
     change_form_template = 'admin/postvariant_change_form.html'
-    
     class Media:
         js = ('js/admin/post_variant.js',)
+        
+@admin.register(models.PostAudio)
+class PostAudioAdmin(admin.ModelAdmin):
+    pass
 
 @admin.register(models.Post)
 class PostAdmin(admin.ModelAdmin):
@@ -545,10 +549,13 @@ class PostAdmin(admin.ModelAdmin):
            'fields': ('phrase', 'hashtag', 'posted', 'type')
         }),
         ('Images', {
-            'fields': ('variant', 'background_image1', 'background_image2', 'image', 'svg', 'width', 'height'),
+            'fields': ('variant', 'image1', 'aspect_ratio_image1', 'image2', 'aspect_ratio_image2', 'svg'),
         }),
         ('Font', {
             'fields': ('font_size', 'text_wrap'),
+        }),
+        ('Media', {
+            'fields': ('image', 'width', 'aspect_ratio_image', 'audio', 'video', 'video_duration'),
         }),
     )
     class Media:
@@ -581,23 +588,33 @@ class PostAdmin(admin.ModelAdmin):
         )
         
     def response_change(self, request, obj: models.Post):
-        if "generate_image_post" or "preview" in request.POST and obj:
-            is_preview = request.POST.get("preview", None) != None
+        is_preview = bool(request.POST.get("preview"))
+        is_image = bool(request.POST.get("generate_image_post"))
+        is_video = bool(request.POST.get("generate_video"))
+        
+        if (is_image or is_preview) and obj:
             req = requests.get(obj.variant.font_family)
+            height = get_dimentions(obj.aspect_ratio_image, obj.width)[1]
             
-            if bool(obj.background_image1) and bool(obj.background_image2) == False:
-                img_height = 1440
-                img_background = Image.new("RGBA", (obj.width, img_height), "#ffffff") #3:4 
+            if bool(obj.image1) and bool(obj.image2) == False:
+                img_background = Image.new("RGBA", (obj.width, int(height)), "#ffffff") #3:4 
                 draw_background = ImageDraw.Draw(img_background)
                 
                 if is_preview:
-                    loss = img_height - obj.width
-                    draw_background.rectangle(xy=((0, loss/2),(obj.width-1, obj.width + loss / 2)), outline="red")
+                    loss = int(height) - obj.width
+                    draw_background.rectangle(xy=((0, loss/2),(obj.width-1, (obj.width + loss / 2) - 1)), outline="red")
+                    
+                    height2 = int(get_dimentions("3:4", obj.width)[1])
+                    loss2 = int(height) - height2
+                    draw_background.rectangle(xy=((0, loss2/2),(obj.width-1, (height2 + loss2/ 2) - 1)), outline="red")
                 
                 padding = 32
                 gap_y = 64
                 
-                main_text = "\n".join(textwrap.wrap(obj.phrase, width=obj.text_wrap)).replace(r'\n', '\n')
+                main_text = ""
+                for text in request.POST.get("phrase").split('\n'):
+                    main_text = main_text + "\n".join(textwrap.wrap(text, width=obj.text_wrap)) + "\n"
+                
                 main_font = ImageFont.truetype(BytesIO(req.content), size=obj.font_size)
                 img_text = text_to_image(
                     draw=draw_background, 
@@ -608,10 +625,11 @@ class PostAdmin(admin.ModelAdmin):
                     outline=is_preview
                 )
                 
-                image1 = Image.open(obj.background_image1)
+                image1 = Image.open(obj.image1)
+                aspect_ratio_image1 = obj.aspect_ratio_image1.split(":")
                 image1 = crop_horizontal_image(
                     image=image1, 
-                    aspect_ratio=(4, 3), 
+                    aspect_ratio=(int(aspect_ratio_image1[0]), int(aspect_ratio_image1[1])) , 
                     resize_width=obj.width - padding * 2
                 )
                 
@@ -624,12 +642,12 @@ class PostAdmin(admin.ModelAdmin):
                     f"#{obj.variant.background_color}"
                 )
             
-                if bool(obj.background_image1) and bool(obj.background_image2):
-                    image1 = Image.open(obj.background_image1)
-                    background_image2 = Image.open(obj.background_image2)
+                if bool(obj.image1) and bool(obj.image2):
+                    image1 = Image.open(obj.image1)
+                    image2 = Image.open(obj.image2)
                     
                     image1 = resize_image(image1, obj.width)
-                    background_image2 = resize_image(background_image2, obj.width)
+                    image2 = resize_image(image2, obj.width)
                     
                     crop_image = {
                         "left": obj.width / 4,
@@ -639,12 +657,12 @@ class PostAdmin(admin.ModelAdmin):
                     }
                     
                     image1 = image1.crop(tuple(crop_image.values()))
-                    background_image2 = background_image2.crop(tuple(crop_image.values()))
+                    image2 = image2.crop(tuple(crop_image.values()))
                     
                     overlay_color = "#222222"
                     overlay_img = Image.new("RGBA", (obj.width, obj.width), overlay_color)
                     img_background.paste(image1, (0, 0)) 
-                    img_background.paste(background_image2, (int(obj.width/2), 0))
+                    img_background.paste(image2, (int(obj.width/2), 0))
                     
                     img_background = Image.blend(overlay_img, img_background, alpha=0.3)
                 else:
@@ -680,20 +698,38 @@ class PostAdmin(admin.ModelAdmin):
             media_path = f"./media/{image_name}"
             img_background.save(media_path)
             
-            if not is_preview:
-                try:
-                    if bool(obj.background_image1):
-                        os.remove(obj.background_image1.path)
-                        obj.background_image1 = None
+            # if not is_preview:
+            #     try:
+            #         if bool(obj.image1):
+            #             os.remove(obj.image1.path)
+            #             obj.image1 = None
                     
-                    if bool(obj.background_image2):
-                        os.remove(obj.background_image2.path)
-                        obj.background_image2 = None
-                except OSError as e:
-                    print(e)
+            #         if bool(obj.image2):
+            #             os.remove(obj.image2.path)
+            #             obj.image2 = None
+            #     except OSError as e:
+            #         print(e)
 
             obj.image = image_name
+            obj.save()
             return HttpResponseRedirect(".")
+        elif is_video and obj:
+            audio_clip = AudioFileClip(obj.audio.file.path)
+            image_clip = ImageClip(obj.image.path)
+            video_clip = image_clip.set_audio(audio_clip)
+            if obj.video_duration > 0 and audio_clip.duration > obj.video_duration:
+                audio_clip.duration = obj.video_duration
+                video_clip.duration = obj.video_duration
+            else:
+                video_clip.duration = audio_clip.duration
+                obj.video_duration = audio_clip.duration
+            video_clip.fps = 24
+            video_path = os.path.join(settings.BASE_DIR, "media", f"post-{obj.id}.mp4")
+            video_clip.write_videofile(video_path)
+            obj.video = f"post-{obj.id}.mp4"
+            obj.save()
+            return HttpResponseRedirect(".")
+            
         return super().response_change(request, obj)
         
 @admin.register(models.PostGenerator)

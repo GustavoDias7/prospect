@@ -8,6 +8,7 @@ cffi==1.17.1
 chardet==5.2.0
 charset-normalizer==3.4.1
 cssselect2==0.7.0
+decorator==4.4.2
 defusedxml==0.7.1
 diff-match-patch==20241021
 Django==5.1.4
@@ -16,10 +17,15 @@ environs==14.1.0
 exceptiongroup==1.2.2
 h11==0.14.0
 idna==3.10
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
 marshmallow==3.26.1
+moviepy==1.0.3
+numpy==2.2.3
 outcome==1.3.0.post0
 packaging==24.2
 pillow==10.4.0
+proglog==0.1.10
 pycparser==2.22
 PySocks==1.7.1
 python-dotenv==1.0.1
@@ -32,6 +38,7 @@ soupsieve==2.6
 sqlparse==0.5.3
 tablib==3.7.0
 tinycss2==1.4.0
+tqdm==4.67.1
 trio==0.28.0
 trio-websocket==0.11.1
 typing_extensions==4.12.2
