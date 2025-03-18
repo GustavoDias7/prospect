@@ -133,15 +133,14 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 @admin.register(models.BusinessContact)
 class BusinessContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
-    list_display = ["id", "name_", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider__name"]
+    list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider__name"]
     actions = [
         actions.get_instagram_data, 
         actions.disqualify, 
         actions.qualify, 
         actions.contacted, 
         actions.archive,
-        actions.has_menu,
-        actions.not_menu,
+        actions.open_link,
         actions.set_contact_quality,
         actions.send_whatsapp_message,
         actions.follow_decider
@@ -198,7 +197,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
         return super().get_form(request, obj, **kwargs)
     
     @admin.display(description='instagram')
-    def name_(self, obj):
+    def instagram(self, obj):
         if obj.name:
             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
             html = f'<a href="{obj.get_instagram_link()}" target="_blannk">{inner_text}</a>'
@@ -283,7 +282,8 @@ class BusinessContactInline(admin.StackedInline):
                 
             if business_contact.username:
                 help_text = business_contact.get_instagram_link()
-                html = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
+                html1 = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">Instagram</a>'
+                html = " | ".join([html1])
                 help_texts["help_texts"].update({"username": mark_safe(html)}) 
                 
             kwargs.update(help_texts)
@@ -297,7 +297,7 @@ class DeciderAdmin(admin.ModelAdmin):
     search_fields = ["id", "name", "email"]
     list_filter = ["followed"]
     inlines = [BusinessContactInline]
-    actions = [actions.follow_decider]
+    actions = [actions.follow_decider, actions.open_link]
     
     class Media:
         js = ('js/admin/decider.js',)

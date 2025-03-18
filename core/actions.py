@@ -1189,3 +1189,7 @@ def not_posted(modeladmin, request, queryset):
     for query in queryset:
         query.posted = False
         query.save()
+        
+@admin.action(description="Open links", permissions=["change"])
+def open_link(modeladmin, request, queryset):
+    pass
