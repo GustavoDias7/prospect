@@ -218,6 +218,7 @@ class Website(models.Model):
     linktree = models.BooleanField(default=False)
     bitly = models.BooleanField(default=False)
     social_media = models.BooleanField(default=False)
+    ignore = models.BooleanField(default=False)
 
 class VacancyCategory(models.Model):
     name = models.CharField(max_length=50)

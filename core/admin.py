@@ -145,7 +145,8 @@ class BusinessContactAdmin(admin.ModelAdmin):
         actions.set_contact_quality,
         actions.check_whatsapp_websites,
         actions.follow_decider,
-        actions.open_selenium
+        actions.open_selenium,
+        actions.check_search_engine
     ]
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     autocomplete_fields = ["decider", "template"]
@@ -489,7 +490,8 @@ class DeciderAdmin(admin.ModelAdmin):
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]
     search_fields = ["website"]
-    list_display = ["id", "website", "qualified", "whatsapp", "linktree", "bitly", "social_media"]
+    list_display = ["id", "website", "qualified", "whatsapp", "linktree", "bitly", "social_media", "ignore"]
+    actions = [actions.ignore_website]
 
 @admin.register(models.Vacancy)
 class VacancyAdmin(admin.ModelAdmin):

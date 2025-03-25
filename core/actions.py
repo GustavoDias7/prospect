@@ -15,6 +15,8 @@ from django.utils import timezone
 from django.conf import settings
 from prospect import regex
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
+from selenium.webdriver.support.ui import Select
+
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -1251,3 +1253,122 @@ def open_link(modeladmin, request, queryset):
 @admin.action(description="Copy name")
 def copy_name(modeladmin, request, queryset):
     pass
+
+
+@admin.action(description="Ignore website", permissions=["change"])
+def ignore_website(modeladmin, request, queryset):
+    for query in queryset:
+        query.ignore = True
+        query.save()
+
+@admin.action(description="Check search engine", permissions=["change"])
+def check_search_engine(modeladmin, request, queryset):
+    options = Options()
+    driver = webdriver.Firefox(options=options)
+    driver.set_window_size(652, 768 - 20)
+    driver.set_window_position(0, 0)
+
+    driver.get("https://lite.duckduckgo.com/lite/")
+    time.sleep(3)
+    
+    websites = models.Website.objects.filter()
+    social_media = models.Website.objects.filter(social_media=True)
+    id_list = []
+    
+    for index, query in enumerate(queryset):
+        print("=" * 32)
+        print(f"{index + 1} of {len(queryset)} - id: {query.id}")
+        print(f"{' | '.join([query.name, query.username, query.get_cellphone_ddd()])}'")
+        print(f"{' | '.join([query.get_cellphone_ddd(), query.fcellphone()])}'")
+        print(query.get_instagram_link())
+        if query.address: print(query.address)
+        print()
+        
+        input_query = driver.find_element(By.CLASS_NAME, "query")
+        input_query.clear()
+        search_query = f"'{query.name}' '{query.username}' "
+        search_query = search_query + " ".join(map(lambda sm: f"-site:{sm}", social_media.values_list("website", flat=True)))
+        
+        input_query.send_keys(search_query)
+        input_query.send_keys(Keys.RETURN)
+        time.sleep(1)
+        
+        select = Select(driver.find_element(By.CSS_SELECTOR, '.filters select'))
+        select.select_by_value('br-pt')
+        
+        input_query = driver.find_element(By.CLASS_NAME, "query")
+        input_query.send_keys(Keys.RETURN)
+        time.sleep(3)
+        
+        
+        links_list = []
+        for counter in range(5):
+            # check bot page
+            try:
+                driver.find_element(By.CSS_SELECTOR, '.anomaly-modal__title')
+                input("Bot page, press enter to continue")      
+            except:
+                pass
+            
+            links = driver.find_elements(By.CSS_SELECTOR, '.result-link')
+            for link in links:
+                href = link.get_attribute("href")
+                # href = href.replace("https://", "").replace("http://", "")
+                
+                is_qualified = None
+                is_unknown = True
+                is_ignore = False
+                is_social_media = False
+                
+                for ws in websites:
+                    if ws.website in href:
+                        if ws.ignore == True:
+                            is_ignore = True
+                        elif ws.qualified == False:
+                            is_qualified = False
+                        elif ws.social_media == True:
+                            is_social_media = True
+                        is_unknown = False
+
+                if is_ignore: 
+                    pass
+                elif is_social_media:
+                    pass
+                elif is_unknown: 
+                    links_list.append(f"[unknown] {href}")
+                elif is_qualified == False:
+                    links_list.append(f"[disqualified] {href}")
+            
+            try:
+                next_form = driver.find_element(By.CSS_SELECTOR, ".next_form")
+                next_form.submit()    
+            except:
+                break
+            
+            time.sleep(4)
+        
+        if len(links_list):
+            links_list = list(dict.fromkeys(links_list))
+            links_list.sort()
+            
+        print("-" * 32)
+        for link in links_list:
+            print(link)
+        print("-" * 32)
+        
+        print()
+        disqualify = input("Disqualify contact? [y/n] ")
+        
+        if disqualify.lower() == "y":
+            query.qualified = False
+            query.save()
+            print("Contact disqualified!")
+        else:
+            id_list.append(query.id)
+            
+        print("=" * 32)
+        
+        query.save()
+    
+    driver.close()
+    print(id_list)
