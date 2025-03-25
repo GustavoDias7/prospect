@@ -13,7 +13,8 @@ from PIL import Image, ImageFont, ImageDraw
 import requests
 from io import BytesIO
 import textwrap
-from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste, get_dimentions
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste, get_dimentions, has_string_in_list
+from prospect.regex import WEBSITE_PATTERN
 import os
 from django.conf import settings
 import cairosvg
@@ -66,22 +67,22 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         if obj:
             if obj.name:
                 help_text = f"https://duckduckgo.com/?t=ffab&q={obj.name}+site%3Ainstagram.com&ia=web"
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                html = f'<a href="{help_text}" target="_blank">{help_text}</a>'
                 help_texts["help_texts"].update({"name": mark_safe(html)})
                 
             if obj.facebook_page:
                 help_text = obj.get_facebook()
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                html = f'<a href="{help_text}" target="_blank">{help_text}</a>'
                 help_texts["help_texts"].update({"facebook_page": mark_safe(html)}) 
             
             if obj.whatsapp:
                 help_text = obj.get_whatsapp_link()
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                html = f'<a href="{help_text}" target="_blank">{help_text}</a>'
                 help_texts["help_texts"].update({"whatsapp": mark_safe(html)}) 
                 
             if obj.instagram:
                 help_text = obj.get_instagram_link()
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                html = f'<a href="{help_text}" target="_blank">{help_text}</a>'
                 help_texts["help_texts"].update({"instagram": mark_safe(html)}) 
                 
             kwargs.update(help_texts)
@@ -93,7 +94,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         if obj.website:
             inner_text = obj.website[0:14] if len(obj.website) > 15 else obj.website
             link = obj.get_website()
-            html = f'<a href="{link}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{link}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -102,7 +103,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     def instagram_(self, obj):
         if obj.instagram:
             link = obj.get_instagram_link()
-            html = f'<a href="{link}" target="_blannk">{obj.instagram}</a>'
+            html = f'<a href="{link}" target="_blank">{obj.instagram}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -111,7 +112,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     def phone_(self, obj):
         if obj.whatsapp:
             link_number = obj.get_whatsapp_link()
-            whatsapp = f'<a href="{link_number}" target="_blannk">{obj.whatsapp}</a>'
+            whatsapp = f'<a href="{link_number}" target="_blank">{obj.whatsapp}</a>'
             if len(obj.whatsapp) == 11: 
                 return mark_safe(whatsapp)
             else: 
@@ -124,7 +125,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         if obj.facebook_page:
             inner_text = obj.name if obj.name else obj.facebook_page
             inner_text = inner_text[0:19] if len(inner_text) > 20 else inner_text
-            html = f'<a href="{obj.get_facebook()}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.get_facebook()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -133,7 +134,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 @admin.register(models.BusinessContact)
 class BusinessContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
-    list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider__name"]
+    list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider_"]
     actions = [
         actions.get_instagram_data, 
         actions.disqualify, 
@@ -142,8 +143,9 @@ class BusinessContactAdmin(admin.ModelAdmin):
         actions.archive,
         actions.open_link,
         actions.set_contact_quality,
-        actions.send_whatsapp_message,
-        actions.follow_decider
+        actions.check_whatsapp_websites,
+        actions.follow_decider,
+        actions.open_selenium
     ]
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     autocomplete_fields = ["decider", "template"]
@@ -178,18 +180,26 @@ class BusinessContactAdmin(admin.ModelAdmin):
         help_texts = { "help_texts": {} }
         if obj:
             if obj.name:
-                help_text = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={obj.name}"
+                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">casadosdados</a>'
+                href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
+                html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
+                html = " | ".join([html1, html2])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
             if obj.cellphone:
-                help_text = obj.get_whatsapp_link(add_message=False)
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
-                help_texts["help_texts"].update({"cellphone": mark_safe(html)}) 
+                href1 = obj.get_whatsapp_link(add_message=False)
+                html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{obj.fcellphone()}</a>'
+                html_ddd = f' - <span style="font-size: 14px;">{obj.get_cellphone_ddd()}</span>'
+                html = " | ".join([html1]) + html_ddd
+                help_texts["help_texts"].update({"cellphone": mark_safe(html)})
                 
             if obj.username:
-                help_text = obj.get_instagram_link()
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                href1 = obj.get_instagram_link()
+                html1 = f'<a href="{href1}" target="_blank">Instagram</a>'
+                href2 = f"https://duckduckgo.com/?t=ffab&q={obj.username}"
+                html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
+                html = " | ".join([html1, html2])
                 help_texts["help_texts"].update({"username": mark_safe(html)}) 
                 
             kwargs.update(help_texts)
@@ -200,11 +210,11 @@ class BusinessContactAdmin(admin.ModelAdmin):
     def instagram(self, obj):
         if obj.name:
             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
-            html = f'<a href="{obj.get_instagram_link()}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         elif obj.username:
             inner_text = obj.username
-            html = f'<a href="{obj.get_instagram_link()}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -222,7 +232,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
             leng = 30
             inner_text = obj.website[0:leng - 1] if len(obj.website) > leng else obj.website
             if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
-            html = f'<a href="{obj.website}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.website}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -233,7 +243,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
             leng = 30
             inner_text = obj.website2[0:leng - 1] if len(obj.website2) > leng else obj.website2
             if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
-            html = f'<a href="{obj.website2}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.website2}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -244,60 +254,118 @@ class BusinessContactAdmin(admin.ModelAdmin):
             if len(obj.cellphone) == 13: 
                 link_number = obj.get_whatsapp_link(add_message=False)
                 inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
-                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
                 return mark_safe(whatsapp)
             if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
                 link_number = obj.get_whatsapp_link(add_message=False)
                 inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
-                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
                 return mark_safe(whatsapp)
             elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
                 link_number = obj.get_whatsapp_link(add_message=False)
                 inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
-                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
                 return mark_safe(whatsapp)
             else: 
                 return obj.cellphone
         else:
             return None
 
+    @admin.display(description='decider')
+    def decider_(self, obj: models.BusinessContact):
+        if obj.decider:
+            inner_text = obj.decider.name
+            href = f"/admin/core/decider/{obj.decider.id}/change/"
+            html = f'<a href="{href}" target="_blank">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
 
 class BusinessContactInline(admin.StackedInline):
     model = models.BusinessContact
+    extra = 0
     
     def get_formset(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
-        business_contact = self.model.objects.get(decider=obj)
-        if business_contact:
-            if business_contact.name:
-                help_text = f"https://duckduckgo.com/?t=ffab&q={business_contact.name}"
-                html = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">duckduckgo</a>'
-                help_texts["help_texts"].update({"name": mark_safe(html)})
-            
-            if business_contact.cellphone:
-                hred = business_contact.get_whatsapp_link(add_message=False)
-                help_text = business_contact.fcellphone()
-                html = f'<a href="{hred}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
-                help_texts["help_texts"].update({"cellphone": mark_safe(html)}) 
-                
-            if business_contact.username:
-                help_text = business_contact.get_instagram_link()
-                html1 = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">Instagram</a>'
-                html = " | ".join([html1])
-                help_texts["help_texts"].update({"username": mark_safe(html)}) 
-                
-            kwargs.update(help_texts)
+        if obj:
+            try:
+                business_contact = self.model.objects.get(decider=obj)
+            except Exception as e:
+                business_contact = None
+                print(e)
+            if business_contact:
+                if business_contact.name:
+                    help_text1 = f"https://casadosdados.com.br/solucao/cnpj?q={business_contact.name}"
+                    html1 = f'<a href="{help_text1}" target="_blank" style="font-size: 12px;">casadosdados</a>'
+                    help_text2 = f"https://duckduckgo.com/?t=ffab&q={business_contact.name}"
+                    html2 = f'<a href="{help_text2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
+                    html3 = "<a href='/' id='id_name_copy_business'>Copy name</a>"
+                    html = f" | ".join([html1, html2, html3])
+                    help_texts["help_texts"].update({"name": mark_safe(html)})
+                    
+                if business_contact.cellphone:
+                    href1 = business_contact.get_whatsapp_link(add_message=False)
+                    html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{business_contact.fcellphone()}</a>'
+                    html_ddd = f'<span style="font-size: 14px;">{business_contact.get_cellphone_ddd()}</span>'
+                    html = " | ".join([html1, html_ddd])
+                    help_texts["help_texts"].update({"cellphone": mark_safe(html)}) 
+                    
+                if business_contact.username:
+                    help_text = business_contact.get_instagram_link()
+                    html1 = f'<a href="{help_text}" target="_blank" style="font-size: 12px;">Instagram</a>'
+                    html = " | ".join([html1])
+                    help_texts["help_texts"].update({"username": mark_safe(html)}) 
+                    
+                kwargs.update(help_texts)
                 
         return super().get_formset(request, obj, **kwargs)
             
   
+class QualifiedListFilter(admin.SimpleListFilter):
+    # Human-readable title which will be displayed in the
+    # right admin sidebar just above the filter options.
+    title = "qualified"
+
+    # Parameter for the filter that will be used in the URL query.
+    # parameter_name = "decade"
+    parameter_name = "qualified"
+
+    def lookups(self, request, model_admin):
+        """
+        Returns a list of tuples. The first element in each
+        tuple is the coded value for the option that will
+        appear in the URL query. The second element is the
+        human-readable name for the option that will appear
+        in the right sidebar.
+        """
+        return [
+            ("none", "Unknown"),
+            ("yes", "Yes"),
+            ("no", "No"),
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes" or self.value() == "no":
+            business_contact = models.BusinessContact.objects.filter(
+                qualified=self.value() == "yes"
+            ).values_list("decider__id", flat=True)
+            return queryset.filter(id__in=business_contact)
+        elif self.value() == "none":
+            business_contact = models.BusinessContact.objects.filter(
+                qualified=None
+            ).values_list("decider__id", flat=True)
+            return queryset.filter(id__in=business_contact)
+        else:
+            return queryset.all()
+        
 @admin.register(models.Decider)
 class DeciderAdmin(admin.ModelAdmin):
-    list_display = ["id", "name_", "phone_", "email", "instagram_"]
+    list_display = ["id", "name_", "business_contact_", "phone_", "email", "instagram_", "contacted"]
     search_fields = ["id", "name", "email"]
-    list_filter = ["followed"]
+    list_filter = ["contacted", QualifiedListFilter]
     inlines = [BusinessContactInline]
-    actions = [actions.follow_decider, actions.open_link]
+    actions = [actions.follow_decider, actions.open_link, actions.copy_name, actions.contacted, actions.qualify]
+    change_form_template = 'admin/decider.html'
     
     class Media:
         js = ('js/admin/decider.js',)
@@ -306,33 +374,80 @@ class DeciderAdmin(admin.ModelAdmin):
         help_texts = { "help_texts": {} }
         if obj:
             if obj.name:
-                help_text1 = f"https://casadosdados.com.br/solucao/cnpj?q={obj.name}"
-                html1 = f'<a href="{help_text1}" target="_blannk" style="font-size: 12px;">casadosdados</a>'
-                help_text2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
-                html2 = f'<a href="{help_text2}" target="_blannk" style="font-size: 12px;">duckduckgo</a>'
-                html = f"{html1} | {html2} | <a href='/' id='id_name_copy'>Copy name</a>"
+                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={obj.name}"
+                html1 = f'<a href="{href1}" target="_blank">casadosdados</a>'
+                href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
+                html2 = f'<a href="{href2}" target="_blank">duckduckgo</a>'
+                html3 = "<a href='/' id='id_name_copy'>Copy name</a>"
+                html4 = "<a href='/' id='id_name_greeting'>Get greeting</a>"
+                html5 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
+                html = " | ".join([html1, html2, html3, html4, html5])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
-            
-            if obj.phone:
-                href = obj.get_whatsapp_link(add_message=False)
-                help_text = obj.fcellphone()
-                html = f'<a href="{href}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
-                help_texts["help_texts"].update({"phone": mark_safe(html)}) 
                 
+            if obj.cnpj:
+                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={obj.cnpj}"
+                html1 = f'<a href="{href1}" target="_blank">casadosdados</a>'
+                href2 = f"https://duckduckgo.com/?t=ffab&q={obj.cnpj}"
+                html2 = f'<a href="{href2}" target="_blank">duckduckgo</a>'
+                html = " | ".join([html1, html2])
+                help_texts["help_texts"].update({"cnpj": mark_safe(html)})
+                
+            if obj.phone:
+                href1 = obj.get_whatsapp_link(add_message=False)
+                html1 = obj.fcellphone()
+                if len(obj.phone) == 13:
+                    html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{obj.fcellphone()}</a>'
+                html_ddd = f'<span style="font-size: 14px;">{obj.get_cellphone_ddd()}</span>'
+                html = " | ".join([html1, html_ddd])
+                help_texts["help_texts"].update({"phone": mark_safe(html)})
+                    
+            if obj.email:
+                html1 = "<a href='/' id='id_email_copy_business'>Copy e-mail</a>"
+                html = f" | ".join([html1])
+                help_texts["help_texts"].update({"email": mark_safe(html)})
+            
             if obj.instagram:
                 help_text = obj.get_instagram_link()
-                html = f'<a href="{help_text}" target="_blannk" style="font-size: 12px;">{help_text}</a>'
+                html = f'<a href="{help_text}" target="_blank" style="font-size: 12px;">Instagram</a>'
                 help_texts["help_texts"].update({"instagram": mark_safe(html)}) 
                 
-            kwargs.update(help_texts)
-                
+        else:
+            html5 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
+            html = " | ".join([html5])
+            help_texts["help_texts"].update({"name": mark_safe(html)})
+        
+        kwargs.update(help_texts)
+            
         return super().get_form(request, obj, **kwargs)
+
+    
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        
+        try:
+            business_contact = models.BusinessContact.objects.get(decider__id=object_id)
+            if business_contact.template:
+                template = Template(business_contact.template.message)
+                context = Context({'business_contact': business_contact})
+                rendered_content = template.render(context)
+                extra_context["template"] = rendered_content
+            else:
+                extra_context["template"] = None
+        except ObjectDoesNotExist:
+            extra_context["template"] = None
+        
+        return super().change_view(
+            request,
+            object_id,
+            form_url,
+            extra_context=extra_context,
+        )
 
     @admin.display(description='name')
     def name_(self, obj):
         if obj.name:
             link = f"https://casadosdados.com.br/solucao/cnpj?q={obj.name}"
-            html = f'<a href="{link}" target="_blannk">{obj.name}</a>'
+            html = f'<a href="{link}" target="_blank">{obj.name}</a>'
             return mark_safe(html)
         else:
             return None
@@ -340,23 +455,12 @@ class DeciderAdmin(admin.ModelAdmin):
     @admin.display(description='phone')
     def phone_(self, obj):
         if obj.phone:
-            if len(obj.phone) == 13 and int(obj.phone[4]) == 9: 
-                link_number = obj.get_whatsapp_link()
-                inner_text = f"+{obj.phone[0:2]} ({obj.phone[2:4]}) {obj.phone[4]} {obj.phone[5:9]}-{obj.phone[9:13]}"
-                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            if len(obj.phone) == 11 and int(obj.phone[2]) == 9: 
-                link_number = obj.get_whatsapp_link()
-                inner_text = f"({obj.phone[0:2]}) {obj.phone[2]} {obj.phone[3:7]}-{obj.phone[7:11]}"
-                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            elif len(obj.phone) == 9 and int(obj.phone[0]) == 9: 
-                link_number = obj.get_whatsapp_link()
-                inner_text = f"{obj.phone[0:5]}-{obj.phone[5:9]}"
-                whatsapp = f'<a href="{link_number}" target="_blannk">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            else: 
-                return obj.phone
+            href1 = obj.get_whatsapp_link(add_message=False)
+            html1 = obj.fcellphone()
+            if len(obj.phone) == 13:
+                html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{obj.fcellphone()}</a>'
+            html = " | ".join([html1])
+            return mark_safe(html)
         else:
             return "-"
     
@@ -364,10 +468,23 @@ class DeciderAdmin(admin.ModelAdmin):
     def instagram_(self, obj):
         if obj.instagram:
             link = obj.get_instagram_link()
-            html = f'<a href="{link}" target="_blannk">{obj.instagram}</a>'
+            html = f'<a href="{link}" target="_blank">{obj.instagram}</a>'
             return mark_safe(html)
         else:
             return "-"
+    
+    @admin.display(description='business contact')
+    def business_contact_(self, obj: models.Decider):
+        business_contact = models.BusinessContact.objects.filter(decider__id=obj.id)[0]
+        if business_contact:
+            inner_text = business_contact.name
+            href = f"/admin/core/businesscontact/{business_contact.id}/change/"
+            html = f'<a href="{href}" target="_blank">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+
+
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]
@@ -408,7 +525,7 @@ class VacancyAdmin(admin.ModelAdmin):
     def job_view_(self, obj):
         if obj.job_view:
             href = f"https://www.linkedin.com/jobs/view/{obj.job_view}/"
-            html = f'<a href="{href}" target="_blannk">Open vacancy</a>'
+            html = f'<a href="{href}" target="_blank">Open vacancy</a>'
             return mark_safe(html)
         else:
             return None
@@ -427,12 +544,12 @@ class CompanyAdmin(admin.ModelAdmin):
         if obj:
             if obj.linkedin:
                 help_text = obj.linkedin
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                html = f'<a href="{help_text}" target="_blank">{help_text}</a>'
                 help_texts["help_texts"].update({"linkedin": mark_safe(html)}) 
             
             if obj.website:
                 help_text = obj.website
-                html = f'<a href="{help_text}" target="_blannk">{help_text}</a>'
+                html = f'<a href="{help_text}" target="_blank">{help_text}</a>'
                 help_texts["help_texts"].update({"website": mark_safe(html)}) 
                 
             kwargs.update(help_texts)
@@ -444,7 +561,7 @@ class CompanyAdmin(admin.ModelAdmin):
         if obj.name:
             length = 30
             inner_text = obj.name[0:length - 1] if len(obj.name) > length else obj.name
-            html = f'<a href="{obj.website}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.website}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -454,7 +571,7 @@ class CompanyAdmin(admin.ModelAdmin):
         if obj.linkedin:
             length = 30
             inner_text = obj.linkedin[0:length - 1] if len(obj.linkedin) > length else obj.linkedin
-            html = f'<a href="{obj.linkedin}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.linkedin}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -515,7 +632,7 @@ class LinkedInContactAdmin(admin.ModelAdmin):
     def name_(self, obj):
         if obj.username:
             inner_text = obj.username
-            html = f'<a href="{obj.get_linkedin_link()}" target="_blannk">{inner_text}</a>'
+            html = f'<a href="{obj.get_linkedin_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
             return "-"
@@ -549,7 +666,7 @@ class PostAdmin(admin.ModelAdmin):
            'fields': ('phrase', 'hashtag', 'posted', 'type')
         }),
         ('Images', {
-            'fields': ('variant', 'image1', 'aspect_ratio_image1', 'image2', 'aspect_ratio_image2', 'svg'),
+            'fields': ('variant', 'image1', 'aspect_ratio_image1', 'image1_url', 'image2', 'aspect_ratio_image2', 'svg'),
         }),
         ('Font', {
             'fields': ('font_size', 'text_wrap'),
@@ -586,6 +703,27 @@ class PostAdmin(admin.ModelAdmin):
             form_url,
             extra_context=extra_context,
         )
+        
+    def save_model(self, request, obj: models.Post, form, change):
+        # if obj.image1 == None and obj.image1_url:
+        if obj.image1_url:
+            img_res = requests.get(obj.image1_url)
+            if img_res.ok:
+                image_res_name = re.search(r'([^/?#]+)(?=\?|\#|$)', obj.image1_url).group(0)
+                image_res_path = os.path.join(settings.BASE_DIR, "media", image_res_name)
+                with open(image_res_path, 'wb') as handler:
+                    handler.write(img_res.content)
+                    obj.image1 = image_res_name
+                image1 = Image.open(image_res_path)
+                aspect_ratio_image1 = obj.aspect_ratio_image1.split(":")
+                image1 = crop_horizontal_image(
+                    image=image1, 
+                    aspect_ratio=(int(aspect_ratio_image1[0]), int(aspect_ratio_image1[1])) , 
+                    resize_width=obj.width
+                )
+                image1.save(image_res_path)
+        
+        super().save_model(request, obj, form, change)
         
     def response_change(self, request, obj: models.Post):
         is_preview = bool(request.POST.get("preview"))
@@ -759,16 +897,29 @@ class PostGeneratorAdmin(admin.ModelAdmin):
     def response_change(self, request, obj):
         if "generate_post" in request.POST and obj and obj.generated != True:
             try:
-                phrases = obj.phrases.split(";")
+                phrases = obj.phrases.split("***")
                 print(phrases)
                 
                 for phrase in phrases:
                     if len(phrase) > 0:
                         post = models.Post()
-                        post.phrase = phrase
+                        post.phrase = phrase.strip()
+                        
+                        website = re.search("(?P<url>https?://[^\s]+)", post.phrase)
+                        if website:
+                            extensions = [".jpg", ".jpeg", ".png", ".webp"]
+                            url = website.group("url")
+                            is_image = has_string_in_list(url, extensions)
+                            if is_image: 
+                                post.image1_url = url
+                                post.phrase = post.phrase.replace(url, "").strip()
+                        else:
+                            print("website not found")
+                        
                         post.variant = models.PostVariant.objects.order_by("?").first()
                         post.svg = models.PostSVG.objects.order_by("?").first()
                         post.type = obj.type
+                        post.hashtag = obj.hashtag
                         post.save()
                 
                 obj.generated = True

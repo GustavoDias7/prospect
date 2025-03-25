@@ -43,6 +43,7 @@ def get_phone(value: str):
         re.search(r"\(\d{2}\)\d{9}", value), # '(99)999999999'
         re.search(r"\d{2} \d{5}-\d{4}", value), # '99 99999-9999'
         re.search(r"\d{2} 9 \d{4}-\d{4}", value), # '99 9 9999-9999'
+        re.search(r"\d{2} 9 \d{4} \d{4}", value), # '99 9 9999 9999'
         re.search(r"\d{2} \d{5} \d{4}", value), # '99 99999 9999'
         re.search(r"\(\d{2}\) 9\d{4} \d{4}", value), # '(99) 99999 9999'
         re.search(r"\d{2} \d{5} - \d{4}", value), # '99 99999 - 9999'

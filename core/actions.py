@@ -126,8 +126,6 @@ def not_menu(modeladmin, request, queryset):
 def open_selenium(modeladmin, request, queryset):
     options = Options()
     driver = webdriver.Firefox(options=options)
-    driver.set_window_size(652, 768 - 20)   
-    driver.set_window_position(0, 0)
  
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset):
@@ -247,6 +245,8 @@ def get_instagram_data(modeladmin, request, queryset):
                     elif is_telephone(phone_number):
                         query.telephone = phone_number
                     break
+        
+        # check for other countries
         
         highlights = driver.find_elements(By.CSS_SELECTOR, "section ul > li [role='button']")
         if highlights and len(highlights) > 0:
@@ -406,7 +406,7 @@ def get_instagram_data(modeladmin, request, queryset):
                             js_last_post = js_last_post_element.get_attribute("dateTime")
                             last_post = datetime.fromisoformat(js_last_post.replace("Z", "+00:00"))
                             query.last_post = last_post
-                            limit_datetime = timezone.now() - timedelta(days=365)
+                            limit_datetime = timezone.now() - timedelta(days=30 * 8)
                             if last_post <= limit_datetime:
                                 query.qualified = False
                                 print("disqualified from last post")
@@ -483,6 +483,8 @@ def get_instagram_data(modeladmin, request, queryset):
         
         # check whatsapp web
         if not query.qualified == False and query.cellphone and len(query.cellphone) in (11, 13):
+        #     print("check the whatsapp")
+        # if False:
             open_tab(driver=driver, search=query.get_whatsapp_link(add_message=False), index_tab=1)
             
             def check_whatsapp():
@@ -567,10 +569,11 @@ def get_instagram_data(modeladmin, request, queryset):
         query.save()
         print("=============================")
 
-        len_chunck = 30
-        chunk = (index + 1) % len_chunck == 0
-        not_last = index + 1 != len(queryset)
-        if chunk and not_last: time.sleep(60)
+        my_index = index + 1
+        len_chunck = 20
+        chunk = my_index % len_chunck == 0
+        not_last = my_index != len(queryset)
+        if chunk and not_last: time.sleep(60 * 5)
         
     driver.close()
 
@@ -906,59 +909,110 @@ def set_contact_quality(modeladmin, request, queryset):
         print("=================================")
     driver.close()
 
-@admin.action(description="Send WhatsApp message", permissions=["change"])
-def send_whatsapp_message(modeladmin, request, queryset):
+@admin.action(description="Check websites in WhatsApp", permissions=["change"])
+def check_whatsapp_websites(modeladmin, request, queryset):
     options = Options()
     driver = webdriver.Firefox(options=options)
     driver.get("https://web.whatsapp.com/")
     input("Press enter to continue ")
+    websites = models.Website.objects.all()
     
     for index, query in enumerate(queryset):
+        print("=============================")
         print(f"{index + 1} of {len(queryset)} - id: {query.id}")
-        if query.cellphone == None: continue
+        if bool(query.cellphone) == False or len(query.cellphone) != 13:
+            print(f"{query.id} was ignored.")
+            print("=============================")
+            continue
         
-        driver.get(query.get_whatsapp_link(add_message=True))
-        time.sleep(15)
-        
-        # find send button and send message
-        try:
-            send_buttons = driver.find_elements(By.CSS_SELECTOR, "footer button")
-            for send_button in send_buttons:
-                label = send_button.get_attribute("aria-label")
-                if label in ("Send", "Enviar"):
-                    selenium_click(driver, send_button)
-                    break
-        except Exception as e:
-            print(e)
+        driver.get(query.get_whatsapp_link(add_message=False))
             
-        # time.sleep(20)
+        if not query.qualified == False and query.cellphone and len(query.cellphone) in (11, 13):
+            def check_whatsapp():
+                result = False
+                
+                try:
+                    role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+                    if role_buttons and len(role_buttons) >= 1:
+                        # open "Profile details" sidebar
+                        for role_button in role_buttons:
+                            title_attr = role_button.get_attribute("title")
+                            terms = ("Profile details", "Dados de perfil")
+                            if any(item in title_attr for item in terms):
+                                driver.execute_script("arguments[0].click();", role_button)
+                                time.sleep(2)
+                                break
+                except Exception as e:
+                    print(e)
+                    
+                try:
+                    title_contacts = driver.find_elements(By.CSS_SELECTOR, "h1")
+                    if title_contacts and len(title_contacts) >= 1:
+                        # check with open "Contact info"
+                        for role_button in title_contacts:
+                            title_attr = role_button.get_attribute("innerText")
+                            terms = ("Contact info", "Dados do contato")
+                            if any(item in title_attr for item in terms):
+                                result = True
+                except Exception as e:
+                    print(e)
+                try:
+                    whatsapp_links = driver.find_elements(By.CSS_SELECTOR, "a")
+                    if whatsapp_links and len(whatsapp_links) >= 1:
+                        for whatsapp_link in whatsapp_links:
+                            link = whatsapp_link.get_attribute("href")
+                            
+                            is_linktree = False
+                            is_qualified = None
+                            is_bitly = False
+                            is_unknown = True
+                            
+                            if "http" in link:
+                                for ws in websites:
+                                    if link and ws.website in link:
+                                        if ws.qualified == False:
+                                            is_qualified = False
+                                        elif ws.linktree:
+                                            is_linktree = True
+                                        elif ws.bitly:
+                                            is_bitly = True
+                                        is_unknown = False
+                                        break
+                                
+                                if is_unknown: 
+                                    query.website = link
+                                elif is_qualified == False:
+                                    query.website = link
+                                    query.qualified = False
+                                    print("disqualified from WhatsApp")
+                                    break
+                                elif is_linktree:
+                                    query.website2 = link
+                                elif is_bitly:
+                                    query.website2 = link
+                                    
+                            elif "mailto" in link:
+                                query.email = link.replace("mailto:", "")
+                except Exception as e:
+                    print(e)
+                    
+                return result
+            
+            try_white(
+                callback=check_whatsapp, 
+                times=4,
+                sleep_initial=15,
+                sleep_after=10
+            )
         
-        # # check if the automatic message has disqualified website
-        # disqualified_websites = models.Website.objects.filter(qualified=False)
-        # try:
-        #     message_links = driver.find_elements(By.CSS_SELECTOR, "#main a")
-        #     for message_link in message_links:
-        #         href = message_link.get_attribute("href")
-        #         for ws in disqualified_websites:
-        #             if ws.website in href:
-        #                 # archive contact in whatsapp
-        #                 # ActionChains(driver) \
-        #                 #     .key_down(Keys.CONTROL) \
-        #                 #     .key_down(Keys.ALT) \
-        #                 #     .key_down(Keys.SHIFT) \
-        #                 #     .send_keys('e') \
-        #                 #     .key_up(Keys.SHIFT) \
-        #                 #     .key_up(Keys.ALT) \
-        #                 #     .key_up(Keys.CONTROL) \
-        #                 #     .perform()
-        #                 query.qualified = False
-        # except Exception as e:
-        #     print(e)
-        
-        query.contacted = True
         query.save()
-        
-        time.sleep(10)
+        print("=============================")
+
+        my_index = index + 1
+        len_chunck = 10
+        chunk = my_index % len_chunck == 0
+        not_last = my_index != len(queryset)
+        if chunk and not_last: time.sleep(60 * 5)
     driver.close()
 
 
@@ -1192,4 +1246,8 @@ def not_posted(modeladmin, request, queryset):
         
 @admin.action(description="Open links", permissions=["change"])
 def open_link(modeladmin, request, queryset):
+    pass
+
+@admin.action(description="Copy name")
+def copy_name(modeladmin, request, queryset):
     pass

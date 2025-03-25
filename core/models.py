@@ -9,7 +9,7 @@ import textwrap
 from prospect.utils import resize_image
 import os
 from django.conf import settings
-from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS
+from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD
 import re
 
 # Create your models here.
@@ -42,11 +42,12 @@ class Contact(models.Model):
         
 class Decider(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
+    cnpj = models.CharField(max_length=18, null=True, blank=True)
     phone = models.CharField(max_length=13, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     instagram = models.CharField(max_length=30, null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
-    followed = models.BooleanField(default=False)
+    contacted = models.BooleanField(default=False)
     
     def get_whatsapp_link(self, add_message: bool | None = True):
         phone = remove_non_numeric(self.phone)
@@ -70,6 +71,23 @@ class Decider(models.Model):
         else:
             return f"https://web.whatsapp.com/send/?phone={phone}"
     
+    def greeting(self):
+        message = f"Olá, {self.get_first_name()} tudo bem?"
+        now = datetime.datetime.now(timezone('America/Sao_Paulo'))
+        
+        morning = now.hour >= 6 and now.hour <= 11
+        afternoon = now.hour >= 12 and now.hour <= 17
+        night = now.hour >= 18
+        
+        if morning:
+            message = f"Olá, {self.get_first_name()} bom dia!"
+        elif afternoon:
+            message = f"Olá, {self.get_first_name()} boa tarde!"
+        elif night:
+            message = f"Olá, {self.get_first_name()} boa noite!"
+            
+        return message
+    
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.instagram}"
     
@@ -89,6 +107,17 @@ class Decider(models.Model):
                 return self.phone
         else:
             return None
+    
+    def get_cellphone_ddd(self) -> str | None:
+        ddd = None
+        
+        if self.phone:
+            if len(self.phone) in (13, 12):
+                ddd = DDD[self.phone[2:4]]
+            elif len(self.phone) in (11, 10):
+                ddd = DDD[self.phone[0:2]]
+            
+        return ddd
             
     def __str__(self):
         if self.name: return self.name
@@ -99,6 +128,7 @@ class Decider(models.Model):
 
 class BusinessContact(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
+    cnpj = models.CharField(max_length=18, null=True, blank=True)
     username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     cellphone = models.CharField(max_length=13, null=True, blank=True)
     telephone = models.CharField(max_length=12, null=True, blank=True)
@@ -165,6 +195,17 @@ class BusinessContact(models.Model):
                 return self.telephone
         else:
             return None
+        
+    def get_cellphone_ddd(self) -> str | None:
+        ddd = None
+        
+        if self.cellphone:
+            if len(self.cellphone) in (13, 12):
+                ddd = DDD[self.cellphone[2:4]]
+            elif len(self.cellphone) in (11, 10):
+                ddd = DDD[self.cellphone[0:2]]
+            
+        return ddd
     
     def __str__(self):
         if self.username: return self.username
@@ -308,22 +349,23 @@ class PostAudio(models.Model):
 
 class Post(models.Model):
     phrase = models.TextField(max_length=150)
-    variant = models.ForeignKey(PostVariant, null=True, on_delete=models.SET_NULL)
+    variant = models.ForeignKey(PostVariant, default=1, null=True, on_delete=models.SET_NULL)
     hashtag = models.ForeignKey(Hashtag, null=True, on_delete=models.SET_NULL)
     posted = models.BooleanField(default=False)
     image1 = models.ImageField(null=True, blank=True)
+    image1_url = models.URLField(null=True, blank=True)
     aspect_ratio_image1 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
     image2 = models.ImageField(null=True, blank=True)
     aspect_ratio_image2 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
     image = models.ImageField(null=True, blank=True)
-    aspect_ratio_image = models.CharField(max_length=4, choices=VERTICAL_ASPECT_RATIOS, default="3:4", null=True, blank=True)
+    aspect_ratio_image = models.CharField(max_length=4, choices=VERTICAL_ASPECT_RATIOS, default="9:16", null=True, blank=True)
     audio = models.ForeignKey(PostAudio, null=True, blank=True, on_delete=models.SET_NULL)
     video = models.FileField(null=True, blank=True)
     video_duration = models.PositiveSmallIntegerField(default=10)
     type = models.ForeignKey(PostType, null=True, blank=True, on_delete=models.SET_NULL)
-    font_size = models.PositiveSmallIntegerField(default=64)
+    font_size = models.PositiveSmallIntegerField(default=48)
     width = models.PositiveSmallIntegerField(default=1080)
-    text_wrap = models.PositiveSmallIntegerField(default=30)
+    text_wrap = models.PositiveSmallIntegerField(default=40)
     svg = models.ForeignKey(PostSVG, null=True, blank=True, on_delete=models.SET_NULL)
     
     def save(self, *args, **kwargs):
@@ -347,6 +389,7 @@ class Post(models.Model):
 class PostGenerator(models.Model):
     phrases = models.TextField(max_length=1500)
     type = models.ForeignKey(PostType, null=True, blank=True, on_delete=models.SET_NULL)
+    hashtag = models.ForeignKey(Hashtag, null=True, on_delete=models.SET_NULL)
     generated = models.BooleanField(default=False)
     
     def save(self, *args, **kwargs):
