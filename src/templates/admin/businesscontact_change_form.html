@@ -6,9 +6,12 @@
     <div class="inline-heading">MESSAGE</div>
 </fieldset>
 <pre id="rendered-template">{{template}}</pre>
+{% endif %}
 
 <div class="submit-row">
+    {% if template %}
     <input  class="copy-message" id="copy-message" type="button" value="Copy message">
+    {% endif %}
     <input 
         type="submit"
         name="generate_image"
@@ -16,9 +19,9 @@
         value="Generate image" 
     />
 </div>
-{% endif %}
 
 {% if business_contact %}
+
     {% if business_contact.image1 or business_contact.image2 or business_contact.image3 %}
     <fieldset><div class="inline-heading">IMAGES</div></fieldset>
     {% endif %}

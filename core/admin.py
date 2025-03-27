@@ -20,6 +20,7 @@ from django.conf import settings
 import cairosvg
 import re
 from moviepy.editor import AudioFileClip, ImageClip
+import html
 
 @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -150,16 +151,64 @@ class BusinessContactAdmin(admin.ModelAdmin):
     ]
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     autocomplete_fields = ["decider", "template"]
-    change_form_template = 'admin/vacancy_change_form.html'
+    change_form_template = 'admin/businesscontact_change_form.html'
     
     class Media:
         js = ('js/admin/instagram_contacts.js',)
+    
+    def response_change(self, request, obj: models.BusinessContact):
+        is_image = bool(request.POST.get("generate_image"))
+        
+        if is_image and obj:
+            dimentions = get_dimentions("9:16", 1280, int)
+            img_desktop = Image.new("RGBA", (1280, 3961), "#ffffff")
+            loss = 1685
+            
+            svg_template = ""
+            with open(os.path.join(settings.BASE_DIR, "media", "desktop.svg")) as f:
+                svg_template = f.read()
+                svg_template = svg_template.replace("#00C950", obj.color)
+                svg_template = svg_template.replace("Logotype", html.escape(obj.name))
+            
+            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
+            background_template = Image.open(filelike_obj)
+            img_desktop.paste(background_template, (0, 0))
+            
+            frame1 = img_desktop.crop((0, 0, dimentions[0], dimentions[1]))
+            frame1_name = f'{obj.id}-frame-1.png'
+            frame1.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame1_name))
+            obj.image1 = os.path.join("business_contact", frame1_name)
+
+            frame2 = img_desktop.crop((0, 0+loss, dimentions[0], dimentions[1]+loss))
+            frame2_name = f'{obj.id}-frame-2.png'
+            frame2.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame2_name))
+            obj.image2 = os.path.join("business_contact", frame2_name)
+            
+            img_cart = Image.new("RGBA", (360, 810), "#ffffff")
+            svg_template = ""
+            with open(os.path.join(settings.BASE_DIR, "media", "mobile.svg")) as f:
+                svg_template = f.read()
+                svg_template = svg_template.replace("#00C950", obj.color)
+            
+            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
+            cart_template = Image.open(filelike_obj)
+            img_cart.paste(cart_template, (0, 0))
+            
+            frame3_name = f'{obj.id}-frame-3.png'
+            img_cart.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame3_name))
+            obj.image3 = os.path.join("business_contact", frame3_name)
+            
+            obj.save()
+            return HttpResponseRedirect(".")
+        
+        return super().response_change(request, obj)
     
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
         
         try:
             business_contact = models.BusinessContact.objects.get(id=object_id)
+            extra_context["business_contact"] = business_contact
             if business_contact.template:
                 template = Template(business_contact.template.message)
                 context = Context({'business_contact': business_contact})
@@ -420,13 +469,61 @@ class DeciderAdmin(admin.ModelAdmin):
         kwargs.update(help_texts)
             
         return super().get_form(request, obj, **kwargs)
+    
+    def response_change(self, request, obj: models.Decider):
+        is_image = bool(request.POST.get("generate_image"))
+        business_contact = models.BusinessContact.objects.filter(decider__id=obj.id)[0]
+        
+        if is_image and obj:
+            dimentions = get_dimentions("9:16", 1280, int)
+            img_desktop = Image.new("RGBA", (1280, 3961), "#ffffff")
+            loss = 1685
+            
+            svg_template = ""
+            with open(os.path.join(settings.BASE_DIR, "media", "desktop.svg")) as f:
+                svg_template = f.read()
+                svg_template = svg_template.replace("#00C950", business_contact.color)
+                svg_template = svg_template.replace("Logotype", html.escape(business_contact.name))
+                
+            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
+            background_template = Image.open(filelike_obj)
+            img_desktop.paste(background_template, (0, 0))
+            
+            frame1 = img_desktop.crop((0, 0, dimentions[0], dimentions[1]))
+            frame1_name = f'{business_contact.id}-frame-1.png'
+            frame1.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame1_name))
+            business_contact.image1 = os.path.join("business_contact", frame1_name)
 
+            frame2 = img_desktop.crop((0, 0+loss, dimentions[0], dimentions[1]+loss))
+            frame2_name = f'{business_contact.id}-frame-2.png'
+            frame2.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame2_name))
+            business_contact.image2 = os.path.join("business_contact", frame2_name)
+
+            img_cart = Image.new("RGBA", (360, 810), "#ffffff")
+            svg_template = ""
+            with open(os.path.join(settings.BASE_DIR, "media", "mobile.svg")) as f:
+                svg_template = f.read()
+                svg_template = svg_template.replace("#00C950", business_contact.color)
+            
+            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
+            cart_template = Image.open(filelike_obj)
+            img_cart.paste(cart_template, (0, 0))
+            
+            frame3_name = f'{business_contact.id}-frame-3.png'
+            img_cart.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame3_name))
+            business_contact.image3 = os.path.join("business_contact", frame3_name)
+            
+            business_contact.save()
+            return HttpResponseRedirect(".")
+        
+        return super().response_change(request, obj)
     
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
         
         try:
             business_contact = models.BusinessContact.objects.get(decider__id=object_id)
+            extra_context["business_contact"] = business_contact
             if business_contact.template:
                 template = Template(business_contact.template.message)
                 context = Context({'business_contact': business_contact})

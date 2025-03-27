@@ -344,6 +344,10 @@ def has_term(term: str, terms: list | tuple, case_sensitive: bool = False) -> bo
         return new_value.lower() if case_sensitive == False else new_value
     return any(handle_lower(item) in handle_lower(term) for item in terms)
 
-def get_dimentions(aspect_ratio: str, width: int):
+def get_dimentions(aspect_ratio: str, width: int, type: int | None = None):
     numerator, denominator = aspect_ratio.split(":")
-    return (float(width), width * int(denominator) / int(numerator))
+    result = (float(width), width * int(denominator) / int(numerator))
+    if type == int:
+        return (int(result[0]), int(result[1]))
+    else:
+        return result

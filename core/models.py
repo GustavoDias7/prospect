@@ -9,7 +9,7 @@ import textwrap
 from prospect.utils import resize_image
 import os
 from django.conf import settings
-from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD
+from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD, COLORS
 import re
 
 # Create your models here.
@@ -47,6 +47,7 @@ class Decider(models.Model):
     email = models.EmailField(null=True, blank=True)
     instagram = models.CharField(max_length=30, null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
+    color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
     contacted = models.BooleanField(default=False)
     
     def get_whatsapp_link(self, add_message: bool | None = True):
@@ -72,22 +73,25 @@ class Decider(models.Model):
             return f"https://web.whatsapp.com/send/?phone={phone}"
     
     def greeting(self):
-        message = f"Olá, {self.get_first_name()} tudo bem?"
-        now = datetime.datetime.now(timezone('America/Sao_Paulo'))
-        
-        morning = now.hour >= 6 and now.hour <= 11
-        afternoon = now.hour >= 12 and now.hour <= 17
-        night = now.hour >= 18
-        
-        if morning:
-            message = f"Olá, {self.get_first_name()} bom dia!"
-        elif afternoon:
-            message = f"Olá, {self.get_first_name()} boa tarde!"
-        elif night:
-            message = f"Olá, {self.get_first_name()} boa noite!"
+        if self.name:
+            message = f"Olá, {self.get_first_name()} tudo bem?"
+            now = datetime.datetime.now(timezone('America/Sao_Paulo'))
             
-        return message
-    
+            morning = now.hour >= 6 and now.hour <= 11
+            afternoon = now.hour >= 12 and now.hour <= 17
+            night = now.hour >= 18
+            
+            if morning:
+                message = f"Olá, {self.get_first_name()} bom dia!"
+            elif afternoon:
+                message = f"Olá, {self.get_first_name()} boa tarde!"
+            elif night:
+                message = f"Olá, {self.get_first_name()} boa noite!"
+                
+            return message
+        else:
+            message = f"Olá, tudo bem?"
+        
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.instagram}"
     
@@ -144,6 +148,10 @@ class BusinessContact(models.Model):
     menu = models.BooleanField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
     followed = models.BooleanField(default=False)
+    color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
+    image1 = models.ImageField(null=True, blank=True)
+    image2 = models.ImageField(null=True, blank=True)
+    image3 = models.ImageField(null=True, blank=True)
     
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.username}"

@@ -1278,8 +1278,8 @@ def check_search_engine(modeladmin, request, queryset):
     for index, query in enumerate(queryset):
         print("=" * 32)
         print(f"{index + 1} of {len(queryset)} - id: {query.id}")
-        print(f"{' | '.join([query.name, query.username, query.get_cellphone_ddd()])}'")
-        print(f"{' | '.join([query.get_cellphone_ddd(), query.fcellphone()])}'")
+        print(f"{' | '.join([query.name, query.username])}'")
+        print(f"{' | '.join([query.fcellphone(), query.get_cellphone_ddd()])}'")
         print(query.get_instagram_link())
         if query.address: print(query.address)
         print()
