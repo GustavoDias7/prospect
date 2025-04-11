@@ -7,13 +7,14 @@ from django.core.exceptions import ObjectDoesNotExist
 from bs4 import BeautifulSoup
 import urllib.parse
 from . import models
+from . import forms
 from django.template import Context, Template
 from django.http import HttpResponseRedirect
 from PIL import Image, ImageFont, ImageDraw
 import requests
 from io import BytesIO
 import textwrap
-from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste, get_dimentions, has_string_in_list
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste, get_dimentions, has_string_in_list, boldify
 from prospect.regex import WEBSITE_PATTERN
 import os
 from django.conf import settings
@@ -152,23 +153,43 @@ class BusinessContactAdmin(admin.ModelAdmin):
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     autocomplete_fields = ["decider", "template"]
     change_form_template = 'admin/businesscontact_change_form.html'
-    
-    class Media:
-        js = ('js/admin/instagram_contacts.js',)
+    form = forms.BusinessContactForm
     
     def response_change(self, request, obj: models.BusinessContact):
         is_image = bool(request.POST.get("generate_image"))
+        print(is_image)
         
         if is_image and obj:
             dimentions = get_dimentions("9:16", 1280, int)
             img_desktop = Image.new("RGBA", (1280, 3961), "#ffffff")
             loss = 1685
             
+            old_primary_color = "#FF0000"
+            old_secondary_color = "#0059FF"
+            
             svg_template = ""
-            with open(os.path.join(settings.BASE_DIR, "media", "desktop.svg")) as f:
-                svg_template = f.read()
-                svg_template = svg_template.replace("#00C950", obj.color)
-                svg_template = svg_template.replace("Logotype", html.escape(obj.name))
+            if obj.custom_color:
+                with open(os.path.join(settings.BASE_DIR, "media", "desktop.svg")) as f:
+                    svg_template = f.read()
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.custom_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.custom_color)
+            elif (obj.primary_color and obj.secondary_color) and (obj.primary_color != obj.secondary_color):
+                with open(os.path.join(settings.BASE_DIR, "media", "desktop-1.svg")) as f:
+                    svg_template = f.read()
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
+                svg_template = svg_template.replace(old_secondary_color.upper(), obj.secondary_color)
+                svg_template = svg_template.replace(old_secondary_color.lower(), obj.secondary_color)
+            elif obj.primary_color or obj.secondary_color:
+                with open(os.path.join(settings.BASE_DIR, "media", "desktop.svg")) as f:
+                    svg_template = f.read()
+                color = obj.primary_color or obj.secondary_color
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
+                    
+            svg_template = svg_template.replace("Logotype", html.escape(obj.name))
+            if obj.cellphone:
+                svg_template = svg_template.replace("(21) 4002-8922", html.escape(obj.fcellphone()))
             
             filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
             background_template = Image.open(filelike_obj)
@@ -186,9 +207,25 @@ class BusinessContactAdmin(admin.ModelAdmin):
             
             img_cart = Image.new("RGBA", (360, 810), "#ffffff")
             svg_template = ""
-            with open(os.path.join(settings.BASE_DIR, "media", "mobile.svg")) as f:
-                svg_template = f.read()
-                svg_template = svg_template.replace("#00C950", obj.color)
+                
+            if obj.custom_color:
+                with open(os.path.join(settings.BASE_DIR, "media", "cart-2.svg")) as f:
+                    svg_template = f.read()
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.custom_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.custom_color)
+            elif obj.primary_color and obj.secondary_color and (obj.primary_color != obj.secondary_color):
+                with open(os.path.join(settings.BASE_DIR, "media", "cart-1.svg")) as f:
+                    svg_template = f.read()
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
+                svg_template = svg_template.replace(old_secondary_color.upper(), obj.secondary_color)
+                svg_template = svg_template.replace(old_secondary_color.lower(), obj.secondary_color)
+            elif obj.primary_color or obj.secondary_color:
+                with open(os.path.join(settings.BASE_DIR, "media", "cart-2.svg")) as f:
+                    svg_template = f.read()
+                color = obj.primary_color or obj.secondary_color
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
             
             filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
             cart_template = Image.open(filelike_obj)
@@ -198,8 +235,31 @@ class BusinessContactAdmin(admin.ModelAdmin):
             img_cart.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame3_name))
             obj.image3 = os.path.join("business_contact", frame3_name)
             
+            img_order = Image.new("RGBA", (1280, 1490), "#ffffff")
+            svg_template = ""
+                
+            if obj.custom_color:
+                with open(os.path.join(settings.BASE_DIR, "media", "order.svg")) as f:
+                    svg_template = f.read()
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.custom_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.custom_color)
+            elif obj.primary_color or obj.secondary_color:
+                with open(os.path.join(settings.BASE_DIR, "media", "order.svg")) as f:
+                    svg_template = f.read()
+                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
+                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
+            
+            svg_template = svg_template.replace("Logotype", html.escape(obj.name))
+            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
+            order_template = Image.open(filelike_obj)
+            img_order.paste(order_template, (0, 0))
+            
+            frame4_name = f'{obj.id}-frame-4.png'
+            img_order.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame4_name))
+            obj.image4 = os.path.join("business_contact", frame4_name)
+            
             obj.save()
-            return HttpResponseRedirect(".")
+            return HttpResponseRedirect(request.get_full_path())
         
         return super().response_change(request, obj)
     
@@ -210,7 +270,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
             business_contact = models.BusinessContact.objects.get(id=object_id)
             extra_context["business_contact"] = business_contact
             if business_contact.template:
-                template = Template(business_contact.template.message)
+                template = Template(boldify(business_contact.template.message, True))
                 context = Context({'business_contact': business_contact})
                 rendered_content = template.render(context)
                 extra_context["template"] = rendered_content
@@ -226,7 +286,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
             extra_context=extra_context,
         )
     
-    def get_form(self, request, obj=None, **kwargs):
+    def get_form(self, request, obj:models.BusinessContact = None, **kwargs):
         help_texts = { "help_texts": {} }
         if obj:
             if obj.name:
@@ -234,7 +294,8 @@ class BusinessContactAdmin(admin.ModelAdmin):
                 html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">casadosdados</a>'
                 href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
                 html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
-                html = " | ".join([html1, html2])
+                html3 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
+                html = " | ".join([html1, html2, html3])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
             if obj.cellphone:
@@ -247,9 +308,11 @@ class BusinessContactAdmin(admin.ModelAdmin):
             if obj.username:
                 href1 = obj.get_instagram_link()
                 html1 = f'<a href="{href1}" target="_blank">Instagram</a>'
-                href2 = f"https://duckduckgo.com/?t=ffab&q={obj.username}"
-                html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
-                html = " | ".join([html1, html2])
+                href2 = f"https://ig.me/m/{obj.username}"
+                html2 = f'<a href="{href2}" target="_blank">Instagram DM</a>'
+                href3 = f"https://duckduckgo.com/?t=ffab&q={obj.username}"
+                html3 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
+                html = " | ".join([html1, html2, html3])
                 help_texts["help_texts"].update({"username": mark_safe(html)}) 
                 
             kwargs.update(help_texts)
@@ -330,7 +393,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
             return mark_safe(html)
         else:
             return "-"
-
+            
 class BusinessContactInline(admin.StackedInline):
     model = models.BusinessContact
     extra = 0
@@ -416,9 +479,7 @@ class DeciderAdmin(admin.ModelAdmin):
     inlines = [BusinessContactInline]
     actions = [actions.follow_decider, actions.open_link, actions.copy_name, actions.contacted, actions.qualify]
     change_form_template = 'admin/decider.html'
-    
-    class Media:
-        js = ('js/admin/decider.js',)
+    form = forms.DeciderForm
     
     def get_form(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
@@ -708,9 +769,35 @@ class VacancyHiringAdmin(admin.ModelAdmin):
 @admin.register(models.Template)
 class TemplateAdmin(admin.ModelAdmin):
     search_fields = ["name"]
+    change_form_template = 'admin/template_change_form.html'
     
     class Media:
         js = ('js/admin/template.js',)
+    
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        
+        try:
+            business_contact = models.BusinessContact.objects.get(id=3756)
+            template = models.Template.objects.get(id=object_id)
+            extra_context["business_contact"] = business_contact
+            if template:
+                tpt = Template(boldify(template.message, True))
+                context = Context({'business_contact': business_contact})
+                rendered_content = tpt.render(context)
+                extra_context["template"] = rendered_content
+            else:
+                extra_context["template"] = None
+        except Exception as e:
+            print(e)
+            extra_context["template"] = None
+        
+        return super().change_view(
+            request,
+            object_id,
+            form_url,
+            extra_context=extra_context,
+        )
     
 @admin.register(models.Curriculum)
 class CurriculumAdmin(admin.ModelAdmin):
@@ -758,7 +845,7 @@ class PostAudioAdmin(admin.ModelAdmin):
 @admin.register(models.Post)
 class PostAdmin(admin.ModelAdmin):
     change_form_template = 'admin/post_change_form.html'
-    actions = [actions.not_posted]
+    actions = [actions.upload_post, actions.not_posted]
     list_display = ["id", "phrase", "posted", "type__name"]
     fieldsets = (
         (None, {
@@ -771,7 +858,7 @@ class PostAdmin(admin.ModelAdmin):
             'fields': ('font_size', 'text_wrap'),
         }),
         ('Media', {
-            'fields': ('image', 'width', 'aspect_ratio_image', 'audio', 'video', 'video_duration'),
+            'fields': ('image', 'width', 'aspect_ratio_image', 'audio', 'audio_url', 'video', 'video_duration'),
         }),
     )
     class Media:
@@ -821,6 +908,8 @@ class PostAdmin(admin.ModelAdmin):
                     resize_width=obj.width
                 )
                 image1.save(image_res_path)
+           
+        
         
         super().save_model(request, obj, form, change)
         
@@ -951,9 +1040,21 @@ class PostAdmin(admin.ModelAdmin):
             obj.save()
             return HttpResponseRedirect(".")
         elif is_video and obj:
-            audio_clip = AudioFileClip(obj.audio.file.path)
+            audio_clip = None
+            
+            if obj.audio:
+                audio_clip = AudioFileClip(obj.audio.file.path)
+            elif obj.audio_url:
+                audio_res = requests.get(obj.audio_url)
+                if audio_res.ok:
+                    audio_res_name = re.search(r'([^/?#]+)(?=\?|\#|$)', obj.audio_url).group(0)
+                    audio_res_path = os.path.join(settings.BASE_DIR, "media", audio_res_name)
+                    with open(audio_res_path, 'wb') as handler:
+                        handler.write(audio_res.content)
+                audio_clip = AudioFileClip(audio_res_path)
+            
             image_clip = ImageClip(obj.image.path)
-            video_clip = image_clip.set_audio(audio_clip)
+            video_clip = image_clip.set_audio(audio_clip) if audio_clip else image_clip
             if obj.video_duration > 0 and audio_clip.duration > obj.video_duration:
                 audio_clip.duration = obj.video_duration
                 video_clip.duration = obj.video_duration
@@ -997,23 +1098,23 @@ class PostGeneratorAdmin(admin.ModelAdmin):
         if "generate_post" in request.POST and obj and obj.generated != True:
             try:
                 phrases = obj.phrases.split("***")
-                print(phrases)
                 
                 for phrase in phrases:
                     if len(phrase) > 0:
                         post = models.Post()
                         post.phrase = phrase.strip()
                         
-                        website = re.search("(?P<url>https?://[^\s]+)", post.phrase)
-                        if website:
-                            extensions = [".jpg", ".jpeg", ".png", ".webp"]
-                            url = website.group("url")
-                            is_image = has_string_in_list(url, extensions)
-                            if is_image: 
-                                post.image1_url = url
-                                post.phrase = post.phrase.replace(url, "").strip()
-                        else:
-                            print("website not found")
+                        url_matches = re.findall("(?P<url>https?://[^\s]+)", post.phrase)
+                        for url in url_matches:
+                            image_extensions = [".jpg", ".jpeg", ".png", ".webp"]
+                            is_url_image = has_string_in_list(image_extensions, [url])
+                            if is_url_image: post.image1_url = url
+                            
+                            audio_extensions = [".mp3"]
+                            is_url_audio = has_string_in_list(audio_extensions, [url])
+                            if is_url_audio: post.audio_url = url
+                            
+                            post.phrase = post.phrase.replace(url, "").strip()
                         
                         post.variant = models.PostVariant.objects.order_by("?").first()
                         post.svg = models.PostSVG.objects.order_by("?").first()

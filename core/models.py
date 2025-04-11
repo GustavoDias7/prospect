@@ -1,16 +1,9 @@
 from django.db import models
-from prospect.utils import remove_non_numeric
+from prospect.utils import remove_non_numeric, has_string_in_list
 import datetime
 from pytz import timezone
-from PIL import Image, ImageFont, ImageDraw
-import requests
-from io import BytesIO
-import textwrap
-from prospect.utils import resize_image
-import os
-from django.conf import settings
 from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD, COLORS
-import re
+import random
 
 # Create your models here.
 class Contact(models.Model):
@@ -148,10 +141,36 @@ class BusinessContact(models.Model):
     menu = models.BooleanField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
     followed = models.BooleanField(default=False)
-    color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
+    custom_color = models.CharField(max_length=9, null=True, blank=True)
+    primary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
+    secondary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
     image1 = models.ImageField(null=True, blank=True)
     image2 = models.ImageField(null=True, blank=True)
     image3 = models.ImageField(null=True, blank=True)
+    image4 = models.ImageField(null=True, blank=True)
+    
+    def greeting(self):
+        question = random.choice(["tudo bem", "tudo certo", "tudo certo por ai"])
+        hello = random.choice(["oi", "olá"])
+        
+        if self.name:
+            message = f"{hello.capitalize()} {self.name}, {question}?"
+            now = datetime.datetime.now(timezone('America/Sao_Paulo'))
+            
+            morning = now.hour >= 6 and now.hour <= 11
+            afternoon = now.hour >= 12 and now.hour <= 17
+            night = now.hour >= 18
+            
+            if morning:
+                message = f"{hello.capitalize()} {self.name}, bom dia!"
+            elif afternoon:
+                message = f"{hello.capitalize()} {self.name}, boa tarde!"
+            elif night:
+                message = f"{hello.capitalize()} {self.name}, boa noite!"
+                
+            return message
+        else:
+            message = f"{hello.capitalize()}, {question}?"
     
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.username}"
@@ -214,6 +233,20 @@ class BusinessContact(models.Model):
                 ddd = DDD[self.cellphone[0:2]]
             
         return ddd
+    
+    def business_type(self):
+        business = random.choice(["negócio", "estabelecimento"])
+        message = f"do seu {business}"
+        
+        if self.name and self.username:
+            if has_string_in_list("pizza", [self.name, self.username]):
+                message = "da sua pizzaria"
+            elif has_string_in_list("hambúrguer", [self.name, self.username]):
+                message = "da sua hamburgueria"
+            elif has_string_in_list("restaurante", [self.name, self.username]):
+                message = "do seu restaurante"
+            
+        return message
     
     def __str__(self):
         if self.username: return self.username
@@ -362,13 +395,14 @@ class Post(models.Model):
     hashtag = models.ForeignKey(Hashtag, null=True, on_delete=models.SET_NULL)
     posted = models.BooleanField(default=False)
     image1 = models.ImageField(null=True, blank=True)
-    image1_url = models.URLField(null=True, blank=True)
+    image1_url = models.URLField(null=True, blank=True, max_length=400)
     aspect_ratio_image1 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
     image2 = models.ImageField(null=True, blank=True)
     aspect_ratio_image2 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
     image = models.ImageField(null=True, blank=True)
     aspect_ratio_image = models.CharField(max_length=4, choices=VERTICAL_ASPECT_RATIOS, default="9:16", null=True, blank=True)
     audio = models.ForeignKey(PostAudio, null=True, blank=True, on_delete=models.SET_NULL)
+    audio_url = models.URLField(null=True, blank=True, max_length=400)
     video = models.FileField(null=True, blank=True)
     video_duration = models.PositiveSmallIntegerField(default=10)
     type = models.ForeignKey(PostType, null=True, blank=True, on_delete=models.SET_NULL)

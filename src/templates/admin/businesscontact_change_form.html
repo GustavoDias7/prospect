@@ -22,17 +22,20 @@
 
 {% if business_contact %}
 
-    {% if business_contact.image1 or business_contact.image2 or business_contact.image3 %}
+    {% if business_contact.image1 or business_contact.image2 or business_contact.image3 or business_contact.image4 %}
     <fieldset><div class="inline-heading">IMAGES</div></fieldset>
     {% endif %}
     {% if business_contact.image1 %}
-    <img height="680" src="{{business_contact.image1.url}}?{% now "U" %}" alt="{{business_contact.name}}">
+    <img class="business_contact_image" height="680" src="{{business_contact.image1.url}}?{% now "U" %}" alt="{{business_contact.name}}">
     {% endif %}
     {% if business_contact.image2 %}
-    <img height="680" src="{{business_contact.image2.url}}?{% now "U" %}" alt="{{business_contact.name}}">
+    <img class="business_contact_image" height="680" src="{{business_contact.image2.url}}?{% now "U" %}" alt="{{business_contact.name}}">
     {% endif %}
     {% if business_contact.image3 %}
-    <img height="680" src="{{business_contact.image3.url}}?{% now "U" %}" alt="{{business_contact.name}}">
+    <img class="business_contact_image" height="680" src="{{business_contact.image3.url}}?{% now "U" %}" alt="{{business_contact.name}}">
+    {% endif %}
+    {% if business_contact.image4 %}
+    <img class="business_contact_image" height="680" src="{{business_contact.image4.url}}?{% now "U" %}" alt="{{business_contact.name}}">
     {% endif %}
 {% endif %}
 

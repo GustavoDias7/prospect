@@ -4,6 +4,7 @@ from selenium.webdriver.remote.webelement import WebElement
 import time
 from PIL import Image, ImageFont, ImageDraw
 import json, os
+from prospect.constants import BOLD_MAP
 
 def remove_non_numeric(value:str):
     return "".join(e for e in value if e.isdigit())
@@ -48,6 +49,7 @@ def get_phone(value: str):
         re.search(r"\(\d{2}\) 9\d{4} \d{4}", value), # '(99) 99999 9999'
         re.search(r"\d{2} \d{5} - \d{4}", value), # '99 99999 - 9999'
         re.search(r"\d{2}.\d{5}-\d{4}", value), # '99.99999-9999'
+        re.search(r"\d{2}-\d{5}-\d{4}", value), # '99-99999-9999'
         re.search(r"\d{2}.\d{9}", value), # '99.999999999'
         re.search(r"\d{2} 9\d{8}", value), # '99 999999999'
         re.search(r"\(\d{2}\) \d{9}", value), # '(99) 999999999'
@@ -62,6 +64,7 @@ def get_phone(value: str):
         re.search(r"\(\d{2}\)\d{4}-\d{4}", value), # '(99)9999-9999'
         re.search(r"\(\d{2}\)\d{8}", value), # '(99)99999999'
         re.search(r"\d{2}.\d{4}-\d{4}", value), # '99.9999-9999'
+        re.search(r"\d{2}-\d{4}-\d{4}", value), # '99-9999-9999'
         re.search(r"\d{2}.\d{8}", value), # '99.99999999'
         re.search(r"\d{8}", value), # '99999999'
         re.search(r"\d{4}-\d{4}", value), # '9999-9999'
@@ -98,22 +101,39 @@ def replace_accents(new_string_com_acento: str) -> str:
     
     return string
 
-def has_string_in_list(string: str, string_list: list[str], case_sensitive=False) -> bool:
+def has_string_in_list(string: str | list[str], string_list: list[str], case_sensitive: bool = False) -> bool:
     result = False
+    strings = []
+    
+    if type(string) == str:
+        strings.append(string)
+    elif all(isinstance(s, str) for s in string):
+        strings.extend(string)
     
     for item in string_list:
         norm_item = replace_accents(item)
-        norm_string = replace_accents(string)
         
-        if case_sensitive == False:
-            norm_item = norm_item.lower()
-            norm_string = norm_string.lower()
+        for curr_string in strings:
+            norm_string = replace_accents(curr_string)
+            
+            if case_sensitive == False:
+                norm_item = norm_item.lower()
+                norm_string = norm_string.lower()
+            
+            if norm_string in norm_item:
+                result = True
+                break
         
-        if norm_item in norm_string:
-            result = True
+        if result:
             break
     
     return result
+
+def has_term(term: str, terms: list | tuple, case_sensitive: bool = False) -> bool:
+    def handle_lower(value):
+        new_value = replace_accents(value)
+        return new_value.lower() if case_sensitive == False else new_value
+    return any(handle_lower(item) in handle_lower(term) for item in terms)
 
 def is_telephone(value: str) -> bool:
     if value == None: return False
@@ -338,12 +358,6 @@ def load_cookies(driver: webdriver.Firefox, filename: str):
         
         # driver.refresh() # Refresh Browser after login
     
-def has_term(term: str, terms: list | tuple, case_sensitive: bool = False) -> bool:
-    def handle_lower(value):
-        new_value = replace_accents(value)
-        return new_value.lower() if case_sensitive == False else new_value
-    return any(handle_lower(item) in handle_lower(term) for item in terms)
-
 def get_dimentions(aspect_ratio: str, width: int, type: int | None = None):
     numerator, denominator = aspect_ratio.split(":")
     result = (float(width), width * int(denominator) / int(numerator))
@@ -351,3 +365,25 @@ def get_dimentions(aspect_ratio: str, width: int, type: int | None = None):
         return (int(result[0]), int(result[1]))
     else:
         return result
+
+def convert_to_bold(input_text):
+    return ''.join([BOLD_MAP.get(char, char) for char in input_text])
+
+def boldify(input_text, upper_case: bool = False):
+    def replace_match(match):
+        text = match.group(1)
+        if upper_case: text = text.upper()
+        return convert_to_bold(text)
+
+    modified_text = re.sub(r'\*\*(.*?)\*\*', replace_match, input_text)
+    return modified_text
+
+def log_link(uri, label=None):
+    if label is None: 
+        label = uri
+    parameters = ''
+
+    # OSC 8 ; params ; URI ST <name> OSC 8 ;; ST 
+    escape_mask = '\033]8;{};{}\033\\{}\033]8;;\033\\'
+
+    return escape_mask.format(parameters, uri, label)

@@ -8,7 +8,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, has_string_in_list, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_white, save_cookies, load_cookies)
+from prospect.utils import (get_phone, has_string_in_list, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_white, save_cookies, load_cookies, log_link)
+from prospect.constants import Colors
 from . import models
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -16,7 +17,6 @@ from django.conf import settings
 from prospect import regex
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 from selenium.webdriver.support.ui import Select
-
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -126,8 +126,10 @@ def not_menu(modeladmin, request, queryset):
 
 @admin.action(description="Open Selenium", permissions=["change"])
 def open_selenium(modeladmin, request, queryset):
-    options = Options()
-    driver = webdriver.Firefox(options=options)
+    # options = Options()
+    # driver = webdriver.Firefox(options=options)
+    print(log_link('https://google.com', 'google'))
+    print("\033[4mhello\033[0m")
  
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset):
@@ -271,12 +273,6 @@ def get_instagram_data(modeladmin, request, queryset):
                 if is_qualified == False:
                     break
                 
-                menu_terms = ["catálogo", "cardápio", "menu", "pratos", "pizzas"]
-                has_menu_in_highlight = has_string_in_list(outer_text, menu_terms)
-                if has_menu_in_highlight:
-                    query.menu = True
-                    break
-                
         # open link modals
         buttons = driver.find_elements(By.TAG_NAME, "button")
         if buttons:
@@ -334,7 +330,6 @@ def get_instagram_data(modeladmin, request, queryset):
                             if len(phone_number) == 11:
                                 phone_number = f"55{phone_number}"
                             query.cellphone = phone_number
-                            print("is_whatsapp website:", query.cellphone)
                         elif is_telephone(phone_number):
                             query.telephone = phone_number
                 elif is_qualified == False:
@@ -1025,7 +1020,7 @@ def upload_post(modeladmin, request, queryset):
     driver = webdriver.Firefox(options=options)
     driver.get("https://www.instagram.com/")
     sleep = 30
-    time.sleep(sleep)
+    time.sleep(sleep/2)
     load_cookies(driver, "instagram_cookies")
     
     try:
@@ -1037,8 +1032,7 @@ def upload_post(modeladmin, request, queryset):
         password.send_keys(settings.INSTAGRAM_PASSWORD)
         form.submit()
         
-        time.sleep(sleep)
-        save_cookies(driver, "instagram_cookies")
+        time.sleep(sleep/2)
     except:
         try:
             form = driver.find_element(By.ID, "login_form")
@@ -1049,14 +1043,13 @@ def upload_post(modeladmin, request, queryset):
             password.send_keys(settings.INSTAGRAM_PASSWORD)
             form.submit()
             
-            time.sleep(sleep)
-            save_cookies(driver, "instagram_cookies")
+            time.sleep(sleep/2)
         except:
             pass
     
     time.sleep(sleep/2)
     driver.get(f"https://www.instagram.com/{settings.INSTAGRAM_USERNAME}")
-    time.sleep(sleep)
+    time.sleep(sleep/2)
     
     try:
         body = driver.find_element(By.TAG_NAME, "body")
@@ -1177,11 +1170,6 @@ def upload_post(modeladmin, request, queryset):
             # print(e)
         query.posted = True
         query.save()
-        
-        if index + 1 != len(queryset): time.sleep(sleep)
-        
-        
-    # bot.logout()
     
 
 @admin.action(description="Testing cookies", permissions=["change"])
@@ -1300,6 +1288,7 @@ def check_search_engine(modeladmin, request, queryset):
         input_query.send_keys(Keys.RETURN)
         time.sleep(3)
         
+        colors = Colors()
         
         links_list = []
         for counter in range(5):
@@ -1334,10 +1323,14 @@ def check_search_engine(modeladmin, request, queryset):
                     pass
                 elif is_social_media:
                     pass
-                elif is_unknown: 
-                    links_list.append(f"[unknown] {href}")
+                elif is_unknown:
+                    label = href.replace("https://", "")
+                    href = log_link(href, label)
+                    links_list.append(f"[{colors.get_bg('unknown', 'orange')}] {href}")
                 elif is_qualified == False:
-                    links_list.append(f"[disqualified] {href}")
+                    label = href.replace("https://", "")
+                    href = log_link(href, label)
+                    links_list.append(f"[{colors.get_bg('disqualified', 'red')}] {href}")
             
             try:
                 next_form = driver.find_element(By.CSS_SELECTOR, ".next_form")
