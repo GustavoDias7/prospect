@@ -22,6 +22,7 @@ import cairosvg
 import re
 from moviepy.editor import AudioFileClip, ImageClip
 import html
+from django.middleware.csrf import get_token
 
 @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -393,7 +394,127 @@ class BusinessContactAdmin(admin.ModelAdmin):
             return mark_safe(html)
         else:
             return "-"
+
+
+@admin.register(models.BusinessContactProxy)
+class BusinessContactProxyAdmin(admin.ModelAdmin):
+    list_filter = ["qualified", "contacted", "archived", "followed"]
+    list_display = ["id", "instagram", "cellphone_"]
+    actions = [actions.unfollow, actions.archive]
+    form = forms.BusinessContactProxyForm
+    
+    def changelist_view(self, request, extra_context=None):
+        is_likes = bool(request.POST.get("followed"))
+        if is_likes:
+            id = request.POST.get("followed")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.followed = True
+            contact.save()
             
+        is_likes = bool(request.POST.get("likes"))
+        if is_likes:
+            id = request.POST.get("likes")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.likes = contact.likes + 1
+            contact.save()
+            
+        is_comments = bool(request.POST.get("comments"))
+        if is_comments:
+            id = request.POST.get("comments")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.comments = contact.comments + 1
+            contact.save()
+            
+        return super().changelist_view(request, extra_context) 
+    
+    def get_list_display(self, request):
+        list_display = list(super().get_list_display(request))
+        
+        def follow_contact(self):
+            csrf_token = get_token(request)
+            button_html = f'<input type="submit" value="Follow" style="padding: 8px 12px;" />'
+            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+            field = f'<input type="hidden" name="followed" value="{self.id}" />'
+            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+            html = form_html
+            return mark_safe(html)
+
+        list_display.append("followed")
+        list_display.append(follow_contact)
+        
+        def one_more_like(self):
+            csrf_token = get_token(request)
+            button_html = f'<input type="submit" value="+1 like" style="padding: 8px 12px;" />'
+            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+            field = f'<input type="hidden" name="likes" value="{self.id}" />'
+            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+            html = form_html
+            return mark_safe(html)
+
+        list_display.append("likes")
+        list_display.append(one_more_like)
+        
+        def one_more_comment(self):
+            csrf_token = get_token(request)
+            button_html = f'<input type="submit" value="+1 comment" style="padding: 8px 12px;" />'
+            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+            field = f'<input type="hidden" name="comments" value="{self.id}" />'
+            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+            html = form_html
+            return mark_safe(html)
+
+        list_display.append("comments")
+        list_display.append(one_more_comment)
+        
+        def copy_comment(self):
+            button_html = f'<input class="copy_comment" type="button" value="Copy comment" style="padding: 8px 12px;" />'
+            html = button_html
+            return mark_safe(html)
+        
+        list_display.append(copy_comment)
+
+        return list_display
+       
+    @admin.display(description='cellphone')
+    def cellphone_(self, obj):
+        if obj.cellphone:
+            if len(obj.cellphone) == 13: 
+                link_number = obj.get_whatsapp_link(add_message=False)
+                inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
+                link_number = obj.get_whatsapp_link(add_message=False)
+                inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
+                link_number = obj.get_whatsapp_link(add_message=False)
+                inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            else: 
+                return obj.cellphone
+        else:
+            return None
+    
+    @admin.display(description='instagram')
+    def instagram(self, obj):
+        if obj.name:
+            inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
+            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
+            return mark_safe(html)
+        elif obj.username:
+            inner_text = obj.username
+            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+        
+    class Media:
+        js = ('js/admin/instagram_contacts_proxy.js',)
+    
+
 class BusinessContactInline(admin.StackedInline):
     model = models.BusinessContact
     extra = 0
@@ -918,9 +1039,18 @@ class PostAdmin(admin.ModelAdmin):
         is_image = bool(request.POST.get("generate_image_post"))
         is_video = bool(request.POST.get("generate_video"))
         
-        if (is_image or is_preview) and obj:
+        if (is_image or is_preview) and bool(obj):
             req = requests.get(obj.variant.font_family)
             height = get_dimentions(obj.aspect_ratio_image, obj.width)[1]
+            
+            if bool(obj.image1) == False and bool(obj.image1_url):
+                image1_filename = re.search(r'([^/?#]+)(?=\?|\#|$)', obj.image1_url).group(0)
+                image1_path = os.path.join(settings.BASE_DIR, "media", image1_filename)
+                image1_response = requests.get(obj.image1_url, stream=True)
+                print(image1_filename)
+                if image1_response.ok:
+                    with open(image1_path, 'wb') as handler:
+                        handler.write(image1_response.content)
             
             if bool(obj.image1) and bool(obj.image2) == False:
                 img_background = Image.new("RGBA", (obj.width, int(height)), "#ffffff") #3:4 
@@ -1072,7 +1202,7 @@ class PostAdmin(admin.ModelAdmin):
         
 @admin.register(models.PostGenerator)
 class PostGeneratorAdmin(admin.ModelAdmin):
-    list_display = ["id"]
+    list_display = ["id", "generated"]
     change_form_template = "admin/post_generator_change_form.html"
     
     class Media:

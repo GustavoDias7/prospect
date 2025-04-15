@@ -1221,6 +1221,13 @@ def follow_decider(modeladmin, request, queryset):
     for index, query in enumerate(queryset):
         query.followed = True
         query.save()
+
+@admin.action(description="Unfollow", permissions=["change"])
+def unfollow(modeladmin, request, queryset):
+    
+    for index, query in enumerate(queryset):
+        query.followed = False
+        query.save()
         
 @admin.action(description="Resave", permissions=["change"])
 def resave(modeladmin, request, queryset):

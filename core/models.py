@@ -141,6 +141,8 @@ class BusinessContact(models.Model):
     menu = models.BooleanField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
     followed = models.BooleanField(default=False)
+    likes = models.PositiveSmallIntegerField(default=0)
+    comments = models.PositiveSmallIntegerField(default=0)
     custom_color = models.CharField(max_length=9, null=True, blank=True)
     primary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
     secondary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
@@ -251,6 +253,11 @@ class BusinessContact(models.Model):
     def __str__(self):
         if self.username: return self.username
         else: return f"Instagram {self.id}"
+         
+class BusinessContactProxy(BusinessContact):
+    class Meta:
+        proxy = True
+        verbose_name = "Business Contact Interactions"
         
 class Website(models.Model):
     website = models.CharField(max_length=200, unique=True, null=True, blank=True)

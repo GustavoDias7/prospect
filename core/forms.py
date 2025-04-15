@@ -9,6 +9,14 @@ class BusinessContactForm(forms.ModelForm):
     class Media:
         js = ('js/admin/instagram_contacts.js',)
         
+class BusinessContactProxyForm(forms.ModelForm):
+    class Meta:
+        model = models.BusinessContactProxy
+        fields = "__all__"
+        
+    # class Media:
+    #     js = ('js/admin/instagram_contacts_proxy.js',)
+        
 class TemplateForm(forms.ModelForm):
     class Meta:
         model = models.Template
