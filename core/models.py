@@ -108,11 +108,14 @@ class Decider(models.Model):
     def get_cellphone_ddd(self) -> str | None:
         ddd = None
         
-        if self.phone:
-            if len(self.phone) in (13, 12):
-                ddd = DDD[self.phone[2:4]]
-            elif len(self.phone) in (11, 10):
-                ddd = DDD[self.phone[0:2]]
+        try:
+            if self.phone:
+                if len(self.phone) in (13, 12):
+                    ddd = DDD[self.phone[2:4]]
+                elif len(self.phone) in (11, 10):
+                    ddd = DDD[self.phone[0:2]]
+        except Exception as e:
+            print("DDD not found!")
             
         return ddd
             
@@ -228,11 +231,14 @@ class BusinessContact(models.Model):
     def get_cellphone_ddd(self) -> str | None:
         ddd = None
         
-        if self.cellphone:
-            if len(self.cellphone) in (13, 12):
-                ddd = DDD[self.cellphone[2:4]]
-            elif len(self.cellphone) in (11, 10):
-                ddd = DDD[self.cellphone[0:2]]
+        try:
+            if self.cellphone:
+                if len(self.cellphone) in (13, 12):
+                    ddd = DDD[self.cellphone[2:4]]
+                elif len(self.cellphone) in (11, 10):
+                    ddd = DDD[self.cellphone[0:2]]
+        except Exception as e:
+            print("DDD not found!")
             
         return ddd
     
@@ -403,9 +409,9 @@ class Post(models.Model):
     posted = models.BooleanField(default=False)
     image1 = models.ImageField(null=True, blank=True)
     image1_url = models.URLField(null=True, blank=True, max_length=400)
-    aspect_ratio_image1 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
+    aspect_ratio_image1 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="16:9", null=True, blank=True)
     image2 = models.ImageField(null=True, blank=True)
-    aspect_ratio_image2 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="4:3", null=True, blank=True)
+    aspect_ratio_image2 = models.CharField(max_length=4, choices=ASPECT_RATIOS, default="16:9", null=True, blank=True)
     image = models.ImageField(null=True, blank=True)
     aspect_ratio_image = models.CharField(max_length=4, choices=VERTICAL_ASPECT_RATIOS, default="9:16", null=True, blank=True)
     audio = models.ForeignKey(PostAudio, null=True, blank=True, on_delete=models.SET_NULL)

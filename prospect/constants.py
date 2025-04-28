@@ -425,3 +425,35 @@ class Colors:
         fg_color: str = fg.keys()
     ):
         return f"{self.fg.get(fg_color)}{text}{self.reset}"
+
+COMMENTS = [
+    'Cada detalhe está lindo demais! 👨‍🍳💖',
+    'Tá tudo muito {lindo|lindo|maravilhoso|fantástico}! 💖',
+    'Ficou {lindo|bonito} demais! 😍',
+    'Está tudo uma {graça|maravilha|fofura|lindeza}! 💕',
+    'Tá tudo feito com muito {capricho|carinho|detalhe|encanto}! 👏',
+    '{Amei|Adorei|Gostei de} cada pedacinho! 💖',
+    'Ficou {show|top|massa}! 👨‍🍳✨',
+    'Muito bem feito! 👌',
+    '{Lindo|Bonito|Perfeito} de ver! 🌟',
+    'Tudo {perfeito|uma maravilha|perfeito}! 😍',
+    'Está um capricho puro! 💖',
+    'Tá um encanto! 😍',
+    'Coisa mais {linda|fofa}! 🥰',
+    'Deu até fome! 👨‍🍳🍽️',
+    'Tudo feito com {amor|dedicação|perfeição}! 💕',
+    'Ficou um arraso! 🔥',
+    'Lindo demais, sério! ✨',
+    'Tudo no ponto! 👨‍🍳👌',
+    'Ficou uma {belezinha|graçinha}! 🌸',
+    'Só coisa linda! 😍',
+    'Amando cada detalhe! 💖',
+    'Tudo feito com carinho! 💕',
+    'Tá tudo uma lindeza! 😍',
+    'Simplesmente fofo! 🥹',
+    'Visual {incrível|impecável|de milhões}! 👀💫',
+    'Tudo combinando, {amei|adorei}! 🎨❤️',
+    'Muito gostoso de ver! 👨‍🍳🍰',
+    'Delicado e bonito! 💐',
+    'Ficou top demais! 🔝😄',
+]

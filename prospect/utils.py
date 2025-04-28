@@ -5,6 +5,20 @@ import time
 from PIL import Image, ImageFont, ImageDraw
 import json, os
 from prospect.constants import BOLD_MAP
+import random
+from io import BytesIO
+import cairosvg
+from moviepy.editor import VideoFileClip, AudioFileClip
+import numpy as np
+from moviepy.decorators import audio_video_fx
+
+@audio_video_fx
+def audio_normalize(clip: AudioFileClip):
+    """ Return an audio (or video) clip whose volume is normalized
+        to 0db."""
+
+    mv = clip.max_volume()
+    return clip.volumex(1 / mv)
 
 def remove_non_numeric(value:str):
     return "".join(e for e in value if e.isdigit())
@@ -266,22 +280,63 @@ def crop_horizontal_image(
     else:
         return image
     
+
+
 def text_to_image(
         draw: ImageDraw.ImageDraw, 
         text: str, 
+        width: int,
         fill: str, 
         font: ImageFont.ImageFont, 
         align: str,
         outline: bool = False
     ) -> Image.Image:
-    bbox = draw.textbbox((0, 0), text, font=font)
+    
+    available_width = width
+    wrapped_text = ""
+    
+    space_bbox = draw.textbbox((0, 0), " ", font=font)
+    space_img = Image.new("RGBA", (space_bbox[2], space_bbox[3]), "#00000000")
+    
+    splitted_text = text.strip().split(" ")
+    for index, word in enumerate(splitted_text):
+        word_bbox = draw.textbbox((0, 0), word, font=font)
+        word_img = Image.new("RGBA", (word_bbox[2], word_bbox[3]), "#00000000")
+        word_width = word_img.size[0]
+        space_width = space_img.size[0]
+        
+        if "\n" in word:
+            available_width = width
+            
+        if (word_width + space_width) <= available_width:
+            wrapped_text = wrapped_text + word
+            
+            if index + 1 < len(splitted_text):
+                wrapped_text = wrapped_text + " "
+                available_width = available_width - word_width - space_width
+        elif word_width <= available_width:
+            wrapped_text = wrapped_text + word
+            available_width = available_width - word_width
+        elif word_width > available_width:
+            wrapped_text = wrapped_text + "\n" + word
+            available_width = width - word_width
+            
+            if (word_width + space_width) <= available_width:
+                wrapped_text = wrapped_text + " "
+                available_width = available_width - space_width
+            
+            # if available_width is negative (word_width > width[width of main container])
+            # reset and start from the top
+            if available_width < 0:
+                available_width = width
+        
+    bbox = draw.textbbox((0, 0), wrapped_text, font=font)
     img = Image.new("RGBA", (bbox[2], bbox[3]), "#00000000")
     draw = ImageDraw.Draw(img)
-    if outline:
-        draw.rectangle(xy=((0, 0), (bbox[2]-1, bbox[3]-1)), outline="red")
+    if outline: draw.rectangle(xy=((0, 0), (bbox[2]-1, bbox[3]-1)), outline="red")
     draw.text(
         (0, 0), 
-        text=text,
+        text=wrapped_text,
         # anchor='mm', 
         fill=fill, 
         font=font, 
@@ -289,21 +344,59 @@ def text_to_image(
     )
     return img
     
-def group_vertically(images: tuple[Image.Image], gap) -> Image.Image:
-    # get the greater x and y
-    greater_x = 0
-    max_y = gap
-    for image in images:
-        if image.size[0] > greater_x:
-            greater_x = image.size[0]
-        max_y = max_y + image.size[1]
+def group_vertically(images: tuple[Image.Image], gap: int, align: str = "left") -> Image.Image:
+    # setup the width and height of the group element
+    # grow the width and height when recognize a greater value
+    group_x = 0
+    group_y = 0
+    for index, image in enumerate(images):
+        if image.size[0] > group_x:
+            group_x = image.size[0]
+        group_y = group_y + image.size[1]
+        add_gap = index + 1 != len(images)
+        if add_gap: group_y = group_y + gap
     
-    img = Image.new("RGBA", (greater_x, max_y), "#00000000")
+    img = Image.new("RGBA", (group_x, group_y), "#00000000")
     
     paste_y = 0
     for image in images:
-        img.paste(image, (0, paste_y))
+        paste_x = 0
+        
+        if align == "center":
+            paste_x = int((group_x - image.size[0]) / 2)
+        elif align == "right":
+            paste_x = group_x - image.size[0]
+            
+        img.paste(image, (paste_x, paste_y))
         paste_y = paste_y + image.size[1] + gap
+    
+    return img
+
+def group_horizontally(images: tuple[Image.Image], gap: int, align: str = "top") -> Image.Image:
+    # setup the width and height of the group element
+    # grow the width and height when recognize a greater value
+    group_x = 0
+    group_y = 0
+    for index, image in enumerate(images):
+        if image.size[1] > group_y:
+            group_y = image.size[1]
+        group_x = group_x + image.size[0]
+        add_gap = index + 1 != len(images)
+        if add_gap: group_x = group_x + gap
+    
+    img = Image.new("RGBA", (group_x, group_y), "#00000000")
+    
+    paste_x = 0
+    for image in images:
+        paste_y = 0
+        
+        if align == "center":
+            paste_y = int((group_y - image.size[1]) / 2)
+        elif align == "bottom":
+            paste_y = group_y - image.size[1]
+            
+        img.paste(image, (paste_x, paste_y))
+        paste_x = paste_x + image.size[0] + gap
     
     return img
 
@@ -330,6 +423,52 @@ def center_paste(
         result_y = y
         
     return container.paste(child, (result_x, result_y), child)
+
+def rounded_corners(im: Image.Image, rad: int):
+    circle = Image.new('L', (rad * 2, rad * 2), 0)
+    draw = ImageDraw.Draw(circle)
+    draw.ellipse((0, 0, rad * 2 - 1, rad * 2 - 1), fill=255)
+    alpha = Image.new('L', im.size, 255)
+    w, h = im.size
+    alpha.paste(circle.crop((0, 0, rad, rad)), (0, 0))
+    alpha.paste(circle.crop((0, rad, rad, rad * 2)), (0, h - rad))
+    alpha.paste(circle.crop((rad, 0, rad * 2, rad)), (w - rad, 0))
+    alpha.paste(circle.crop((rad, rad, rad * 2, rad * 2)), (w - rad, h - rad))
+    im.putalpha(alpha)
+    return im
+
+def generate_rectangle(
+    size: tuple[int, int],
+    border_width: int,
+    border_color: str,
+    fill_color: str,
+    border_radius: int
+) -> Image.Image:
+    width = size[0]
+    height = size[1]
+    
+    svg = f'''<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
+        <rect 
+            x="{border_width / 2}" 
+            y="{border_width / 2}" 
+            rx="{border_radius}" 
+            ry="{border_radius}"
+            width="{width - border_width}" 
+            height="{height - border_width}"
+            fill="{fill_color}"
+            stroke="{border_color}"
+            stroke-width="{border_width}" 
+            stroke-linejoin="round"
+        />
+    </svg>'''
+
+    # Convert SVG to PNG using cairosvg
+    png_bytes = cairosvg.svg2png(bytestring=svg.encode('utf-8'))
+
+    # Load PNG into a Pillow Image
+    image = Image.open(BytesIO(png_bytes)).convert("RGBA")
+    
+    return image
 
 def save_cookies(driver: webdriver.Firefox, filename: str):
     # Get and store cookies after login
@@ -387,3 +526,50 @@ def log_link(uri, label=None):
     escape_mask = '\033]8;{};{}\033\\{}\033]8;;\033\\'
 
     return escape_mask.format(parameters, uri, label)
+
+def choice_items(array):
+    copy = array[:]  # Make a shallow copy of the list
+    random.shuffle(copy)  # Shuffle the copy in-place
+
+    phrase = copy[0] if copy else ""
+
+    # Look for a pattern like "{option1|option2|...}"
+    match = re.search(r"{([^}]+)}", phrase)
+    if match:
+        options = match.group(1).split('|')
+        random_word = random.choice(options)
+        phrase = phrase.replace(match.group(0), random_word)
+
+    return phrase
+
+
+def normalize_audio(clip_path: str, target_dBFS=-1.0, sample_duration=5, fps=44100) -> VideoFileClip:
+    """
+    Normalize the audio of a video clip to a target dBFS level.
+    """
+    # Extract the audio as an array
+    clip = VideoFileClip(clip_path)
+    audio = clip.audio
+
+    # Only analyze the first few seconds to avoid large memory usage
+    sample_clip = audio.subclip(0, min(sample_duration, clip.duration))
+    audio_array = sample_clip.to_soundarray(fps=fps)
+
+    # Ensure audio array is 2D (samples, channels)
+    if audio_array.ndim == 1:
+        audio_array = np.expand_dims(audio_array, axis=1)
+
+    peak = np.max(np.abs(audio_array))
+    if peak == 0:
+        print("Audio is silent. Skipping normalization.")
+        return clip
+
+    # Calculate gain factor
+    target_linear = 10 ** (target_dBFS / 20.0)
+    factor = target_linear / peak
+
+    print(f"Peak: {peak:.4f} → Gain factor: {factor:.4f}")
+
+    # Apply volume adjustment
+    normalized_audio = audio.volumex(factor)
+    return clip.set_audio(normalized_audio)

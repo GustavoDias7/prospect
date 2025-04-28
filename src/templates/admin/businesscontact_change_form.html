@@ -2,23 +2,25 @@
 {% block submit_buttons_bottom %}
 
 {% if template %}
-<fieldset>
-    <div class="inline-heading">MESSAGE</div>
-</fieldset>
-<pre id="rendered-template">{{template}}</pre>
+    <fieldset>
+        <div class="inline-heading">MESSAGE</div>
+    </fieldset>
+    <pre id="rendered-template">{{template}}</pre>
 {% endif %}
 
-<div class="submit-row">
-    {% if template %}
-    <input  class="copy-message" id="copy-message" type="button" value="Copy message">
-    {% endif %}
-    <input 
-        type="submit"
-        name="generate_image"
-        id="generate_image" 
-        value="Generate image" 
-    />
-</div>
+{% if business_contact.primary_color or business_contact.secondary_color %}
+    <div class="submit-row">
+        {% if template %}
+        <input  class="copy-message" id="copy-message" type="button" value="Copy message">
+        {% endif %}
+        <input 
+            type="submit"
+            name="generate_image"
+            id="generate_image" 
+            value="Generate image" 
+        />
+    </div>
+{% endif %}
 
 {% if business_contact %}
 

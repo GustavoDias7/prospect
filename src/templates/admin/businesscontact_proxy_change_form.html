@@ -1,0 +1,35 @@
+{% extends "admin/change_list.html" %}
+
+{% block content %}
+    <button class="copy_comment">
+        <div>
+            <span>Copy</span>
+            <span>comment</span>
+        </div>
+    </button>
+
+  {{ block.super }}
+{% endblock %}
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .copy_comment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-family: Consolas, monospace;  
+            background: var(--button-bg);
+            border: none;
+            color: var(--button-fg);
+            cursor: pointer;
+            transition: background 0.15s;
+            width: 72px;
+            height: 72px;
+            border-radius: 72px !important;
+            position: fixed;
+            right: 32px;
+            bottom: 32px;
+        }
+    </style>
+{% endblock %}

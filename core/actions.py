@@ -8,8 +8,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, has_string_in_list, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_white, save_cookies, load_cookies, log_link)
-from prospect.constants import Colors
+from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_white, save_cookies, load_cookies, log_link)
+from prospect.constants import Colors, COMMENTS
 from . import models
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -17,6 +17,7 @@ from django.conf import settings
 from prospect import regex
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 from selenium.webdriver.support.ui import Select
+from django.db.models import QuerySet
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -128,8 +129,7 @@ def not_menu(modeladmin, request, queryset):
 def open_selenium(modeladmin, request, queryset):
     # options = Options()
     # driver = webdriver.Firefox(options=options)
-    print(log_link('https://google.com', 'google'))
-    print("\033[4mhello\033[0m")
+    pass
  
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset):
@@ -1215,8 +1215,8 @@ def test_cookies(modeladmin, request, queryset):
         pass
 
 
-@admin.action(description="Follow decider", permissions=["change"])
-def follow_decider(modeladmin, request, queryset):
+@admin.action(description="Follow", permissions=["change"])
+def follow(modeladmin, request, queryset):
     
     for index, query in enumerate(queryset):
         query.followed = True
@@ -1228,7 +1228,21 @@ def unfollow(modeladmin, request, queryset):
     for index, query in enumerate(queryset):
         query.followed = False
         query.save()
-        
+
+
+@admin.action(description="Comment and like post", permissions=["change"])
+def comment_and_like(modeladmin, request, queryset):
+    for index, query in enumerate(queryset):
+        query.comments = query.comments + 1
+        query.likes = query.likes + 1
+        query.save()
+ 
+@admin.action(description="Like post", permissions=["change"])
+def like_post(modeladmin, request, queryset: QuerySet[models.BusinessContact]):
+    for index, query in enumerate(queryset):
+        query.likes = query.likes + 1
+        query.save()
+ 
 @admin.action(description="Resave", permissions=["change"])
 def resave(modeladmin, request, queryset):
     
@@ -1274,7 +1288,7 @@ def check_search_engine(modeladmin, request, queryset):
         print("=" * 32)
         print(f"{index + 1} of {len(queryset)} - id: {query.id}")
         print(f"{' | '.join([query.name, query.username])}'")
-        print(f"{' | '.join([query.fcellphone(), query.get_cellphone_ddd()])}'")
+        print(f"{' | '.join([str(query.fcellphone()), str(query.get_cellphone_ddd())])}'")
         print(query.get_instagram_link())
         if query.address: print(query.address)
         print()
@@ -1372,3 +1386,68 @@ def check_search_engine(modeladmin, request, queryset):
     
     driver.close()
     print(id_list)
+
+
+@admin.action(description="Help post comments", permissions=["change"])
+def help_comments(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.BusinessContact]):
+    options = Options()
+    # options.add_argument("--headless")
+    driver = webdriver.Firefox(options=options)
+    driver.get("https://www.instagram.com/")
+      
+    time.sleep(5)
+    
+    try:
+        form = driver.find_element(By.ID, "loginForm")
+        username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
+        password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+        
+        username.send_keys(settings.INSTAGRAM_USERNAME)
+        password.send_keys(settings.INSTAGRAM_PASSWORD)
+        form.submit()
+    except:
+        try:
+            form = driver.find_element(By.ID, "login_form")
+            username = driver.find_element(By.CSS_SELECTOR, "input[name='email']")
+            password = driver.find_element(By.CSS_SELECTOR, "input[name='pass']")
+            
+            username.send_keys(settings.INSTAGRAM_USERNAME)
+            password.send_keys(settings.INSTAGRAM_PASSWORD)
+            form.submit()
+        except:
+            pass
+          
+    time.sleep(10)
+    
+    for index, query in enumerate(queryset):
+        print("=" * 32)
+        print(f"{index + 1} of {len(queryset)} - id: {query.id}")
+        
+        driver.get(query.get_instagram_link())
+          
+        time.sleep(10)
+        
+        # get posts
+        try:
+            posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div a")
+            if posts and len(posts) > 0:
+                print([post[0] + 1 for post in enumerate(posts)])
+                post_index = int(input(f"Select one post: ")) - 1
+                
+                selenium_click(driver, posts[post_index])
+                time.sleep(3)
+                
+                # select the comment input
+                comment_input = driver.find_element(By.CSS_SELECTOR, "article section form textarea[placeholder='Add a comment…']")
+                if comment_input:
+                    comment_input.send_keys(choice_items(COMMENTS))
+                
+                #check if the comment was posted
+                time.sleep(5)
+                input("Press enter to continue ")
+                query.comments = query.comments + 1
+                query.save()
+                
+        except Exception as e:
+            print(e)
+        

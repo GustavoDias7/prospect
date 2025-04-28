@@ -10,17 +10,22 @@ from . import models
 from . import forms
 from django.template import Context, Template
 from django.http import HttpResponseRedirect
-from PIL import Image, ImageFont, ImageDraw
+from PIL import Image, ImageFont, ImageDraw, ImageOps
 import requests
 from io import BytesIO
 import textwrap
-from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, center_paste, get_dimentions, has_string_in_list, boldify
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, group_horizontally, center_paste, get_dimentions, has_string_in_list, boldify, rounded_corners, generate_rectangle, audio_normalize
 from prospect.regex import WEBSITE_PATTERN
 import os
 from django.conf import settings
 import cairosvg
 import re
 from moviepy.editor import AudioFileClip, ImageClip
+from moviepy.audio.fx import audio_normalize, volumex
+
+# data, rate = sf.read("test.wav") # load audio (with shape (samples, channels))
+# meter = pyln.Meter(rate) # create BS.1770 meter
+# loudness = meter.integrated_loudness(data) # measure loudness
 import html
 from django.middleware.csrf import get_token
 
@@ -133,7 +138,6 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         else:
             return "-"
 
-
 @admin.register(models.BusinessContact)
 class BusinessContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
@@ -147,7 +151,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
         actions.open_link,
         actions.set_contact_quality,
         actions.check_whatsapp_websites,
-        actions.follow_decider,
+        actions.follow,
         actions.open_selenium,
         actions.check_search_engine
     ]
@@ -312,7 +316,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
                 href2 = f"https://ig.me/m/{obj.username}"
                 html2 = f'<a href="{href2}" target="_blank">Instagram DM</a>'
                 href3 = f"https://duckduckgo.com/?t=ffab&q={obj.username}"
-                html3 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
+                html3 = f'<a href="{href3}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
                 html = " | ".join([html1, html2, html3])
                 help_texts["help_texts"].update({"username": mark_safe(html)}) 
                 
@@ -395,13 +399,19 @@ class BusinessContactAdmin(admin.ModelAdmin):
         else:
             return "-"
 
-
 @admin.register(models.BusinessContactProxy)
 class BusinessContactProxyAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
+    search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     list_display = ["id", "instagram", "cellphone_"]
-    actions = [actions.unfollow, actions.archive]
+    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
+    change_list_template = 'admin/businesscontact_proxy_change_form.html'
     form = forms.BusinessContactProxyForm
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.filter(name__isnull=False)
+        return qs
     
     def changelist_view(self, request, extra_context=None):
         is_likes = bool(request.POST.get("followed"))
@@ -466,12 +476,7 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
         list_display.append("comments")
         list_display.append(one_more_comment)
         
-        def copy_comment(self):
-            button_html = f'<input class="copy_comment" type="button" value="Copy comment" style="padding: 8px 12px;" />'
-            html = button_html
-            return mark_safe(html)
-        
-        list_display.append(copy_comment)
+        list_display.append("last_post_")
 
         return list_display
        
@@ -510,10 +515,16 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
             return mark_safe(html)
         else:
             return "-"
-        
+ 
+    @admin.display(description='last post')
+    def last_post_(self, obj):
+        if obj.last_post:
+            return obj.last_post.strftime("%b. %d, %Y")
+        else:
+            return "-"
+
     class Media:
-        js = ('js/admin/instagram_contacts_proxy.js',)
-    
+        js = ('js/admin/instagram_contacts_proxy.js',)    
 
 class BusinessContactInline(admin.StackedInline):
     model = models.BusinessContact
@@ -554,7 +565,6 @@ class BusinessContactInline(admin.StackedInline):
                 
         return super().get_formset(request, obj, **kwargs)
             
-  
 class QualifiedListFilter(admin.SimpleListFilter):
     # Human-readable title which will be displayed in the
     # right admin sidebar just above the filter options.
@@ -598,7 +608,7 @@ class DeciderAdmin(admin.ModelAdmin):
     search_fields = ["id", "name", "email"]
     list_filter = ["contacted", QualifiedListFilter]
     inlines = [BusinessContactInline]
-    actions = [actions.follow_decider, actions.open_link, actions.copy_name, actions.contacted, actions.qualify]
+    actions = [actions.follow, actions.open_link, actions.copy_name, actions.contacted, actions.qualify]
     change_form_template = 'admin/decider.html'
     form = forms.DeciderForm
     
@@ -763,7 +773,6 @@ class DeciderAdmin(admin.ModelAdmin):
             return mark_safe(html)
         else:
             return "-"
-
 
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
@@ -1047,13 +1056,12 @@ class PostAdmin(admin.ModelAdmin):
                 image1_filename = re.search(r'([^/?#]+)(?=\?|\#|$)', obj.image1_url).group(0)
                 image1_path = os.path.join(settings.BASE_DIR, "media", image1_filename)
                 image1_response = requests.get(obj.image1_url, stream=True)
-                print(image1_filename)
                 if image1_response.ok:
                     with open(image1_path, 'wb') as handler:
                         handler.write(image1_response.content)
             
             if bool(obj.image1) and bool(obj.image2) == False:
-                img_background = Image.new("RGBA", (obj.width, int(height)), "#ffffff") #3:4 
+                img_background = Image.new("RGBA", (obj.width, int(height)), "#fefefe")
                 draw_background = ImageDraw.Draw(img_background)
                 
                 if is_preview:
@@ -1069,28 +1077,99 @@ class PostAdmin(admin.ModelAdmin):
                 
                 main_text = ""
                 for text in request.POST.get("phrase").split('\n'):
-                    main_text = main_text + "\n".join(textwrap.wrap(text, width=obj.text_wrap)) + "\n"
+                    main_text = main_text + text + "\n"
                 
                 main_font = ImageFont.truetype(BytesIO(req.content), size=obj.font_size)
                 img_text = text_to_image(
                     draw=draw_background, 
                     text=main_text,
+                    width=obj.width - padding * 4,
                     fill=f"#222", 
                     font=main_font, 
                     align="left",
                     outline=is_preview
                 )
                 
+                print("text max width:", obj.width - padding * 4)
+                print("img_text:", img_text.size)
+                
                 image1 = Image.open(obj.image1)
                 aspect_ratio_image1 = obj.aspect_ratio_image1.split(":")
                 image1 = crop_horizontal_image(
                     image=image1, 
                     aspect_ratio=(int(aspect_ratio_image1[0]), int(aspect_ratio_image1[1])) , 
-                    resize_width=obj.width - padding * 2
+                    resize_width=obj.width - padding * 4
+                )
+                image1 = rounded_corners(image1, 16)
+                
+                group1 = group_vertically(
+                    images=(img_text, image1), 
+                    gap=int(gap_y / 2),
+                    align="left"
                 )
                 
-                grouped_image = group_vertically(images=(img_text, image1,), gap=gap_y)
-                center_paste(img_background, grouped_image, x=True, y=True)
+                group1_width, group1_height = group1.size
+                square_size = (group1_width + padding * 2, group1_height + padding * 2)
+                
+                img_square = generate_rectangle(
+                    size=square_size,
+                    border_width=2,
+                    border_color="#404040",
+                    fill_color="#f5f5f5",
+                    border_radius=16,
+                )
+                
+                img_square.paste(group1, (padding, padding), group1)
+                
+                sc_font = ImageFont.truetype(BytesIO(req.content), size=48)
+                top_message = text_to_image(
+                    draw=draw_background, 
+                    text="NetDelivery | Criação de Sites",
+                    width=obj.width - padding * 2,
+                    fill=f"#222", 
+                    font=sc_font, 
+                    align="left",
+                    outline=is_preview
+                )
+                
+                tt_font = ImageFont.truetype(BytesIO(req.content), size=40)
+                username = text_to_image(
+                    draw=draw_background, 
+                    text="@web.netdelivery",
+                    width=obj.width - padding * 2,
+                    fill=f"#222", 
+                    font=tt_font, 
+                    align="left",
+                    outline=is_preview
+                )
+                
+                icon_svg = None
+                icon_img = None
+                with open(os.path.join(settings.BASE_DIR, "media", "icon.svg")) as f:
+                    icon_svg = f.read()
+                
+                if icon_svg:
+                    icon_obj = BytesIO(cairosvg.svg2png(icon_svg))
+                    icon_img = Image.open(icon_obj)
+                
+                group2 = group_vertically(
+                    images=(top_message, username), 
+                    gap=0,
+                    align="left"
+                )
+                
+                group3 = group_horizontally(
+                    images=(icon_img, group2), 
+                    gap=24,
+                    align="center"
+                )
+                
+                group4 = group_vertically(
+                    images=(group3, img_square), 
+                    gap=gap_y-8,
+                    align="left"
+                )
+                center_paste(img_background, group4, x=True, y=True)
             else:
                 img_background = Image.new(
                     "RGBA",
@@ -1174,6 +1253,8 @@ class PostAdmin(admin.ModelAdmin):
             
             if obj.audio:
                 audio_clip = AudioFileClip(obj.audio.file.path)
+                audio_clip = audio_normalize.audio_normalize(audio_clip)
+                audio_clip = volumex.volumex(audio_clip, 0.05)
             elif obj.audio_url:
                 audio_res = requests.get(obj.audio_url)
                 if audio_res.ok:
@@ -1182,6 +1263,8 @@ class PostAdmin(admin.ModelAdmin):
                     with open(audio_res_path, 'wb') as handler:
                         handler.write(audio_res.content)
                 audio_clip = AudioFileClip(audio_res_path)
+                audio_clip = audio_normalize.audio_normalize(audio_clip)
+                audio_clip = volumex.volumex(audio_clip, 0.05)
             
             image_clip = ImageClip(obj.image.path)
             video_clip = image_clip.set_audio(audio_clip) if audio_clip else image_clip
@@ -1194,6 +1277,8 @@ class PostAdmin(admin.ModelAdmin):
             video_clip.fps = 24
             video_path = os.path.join(settings.BASE_DIR, "media", f"post-{obj.id}.mp4")
             video_clip.write_videofile(video_path)
+            # video_clip = VideoFileClip(video_clip).with_effects([afx.AudioNormalize()])
+            # video_clip = normalize_audio(video_path)
             obj.video = f"post-{obj.id}.mp4"
             obj.save()
             return HttpResponseRedirect(".")
