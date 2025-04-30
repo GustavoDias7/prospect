@@ -1,0 +1,147 @@
+{% extends "admin/change_list.html" %}
+{% comment %} {% load admin_list %} {% endcomment %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .custom-results {
+            display: flex;
+            gap: 8px;
+        }
+        .custom-results h2 {
+            margin-bottom: 8px;
+        }
+        .custom-results-card {
+            padding: 0px !important;
+            margin: 0px !important;
+        }
+        .custom-results-card li {
+            margin-bottom: 4px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            list-style-type: none;
+        }
+        .custom-results-card .button {
+            display: block; 
+            padding: 4px 8px; 
+            margin-bottom: 0px;
+            width: 100%;
+        }
+        .custom-results-card .buttons {
+            display: flex; 
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .custom-results-card .buttons form {
+            flex-grow: 1;
+        }
+        .copy_comment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-family: Consolas, monospace;  
+            background: var(--button-bg);
+            border: none;
+            color: var(--button-fg);
+            cursor: pointer;
+            transition: background 0.15s;
+            width: 72px;
+            height: 72px;
+            border-radius: 72px !important;
+            position: fixed;
+            right: 32px;
+            bottom: 32px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <button class="copy_comment">
+        <div>
+            <span>Copy</span>
+            <span>comment</span>
+        </div>
+    </button>
+
+  {{ block.super }}
+{% endblock %}
+
+{% block result_list %}
+    <form>
+        {% include "admin/businesscontact_kanban_change_list_results.html" %}
+        <div class="custom-results">
+            <form></form>
+            {% for category, objects in categorized_results.items %}
+            <div>
+                <h2>{{ category|title }} ({{objects|length}})</h2>
+                <ul class="custom-results-card">
+                    {% for obj in objects %}
+                        <li>
+                            <span>
+                                <input type="checkbox" name="_selected_action" value="{{ obj.id }}" class="action-select" aria-label="Select this object for an action - ofner">
+                                [<a href="{{obj.get_admin_change_url}}">{{ obj.id }}</a>]
+                                <a href="{{obj.get_instagram_link}}" target="_blank">{{ obj.username }}</a>
+                            </span>
+
+                            {% if category == 'followed' %}
+                            <form method="POST" style="width: 100%;">
+                                {% csrf_token %}
+                                <input type="submit" value="Comment+Like" class="button">
+                                <input type="hidden" name="comment_like" value="{{obj.id}}">
+                            </form>
+                            {% endif %}
+
+                            {% if category == 'qualified' %}
+                            <form method="POST">
+                                {% csrf_token %}
+                                <input type="submit" value="Follow" class="button">
+                                <input type="hidden" name="followed" value="{{obj.id}}">
+                            </form>
+                            {% endif %}
+
+                            {% if category == 'interacted' %}
+                            <br>
+                            <span>
+                                <i>comments</i> ({{obj.comments}}) | 
+                                <i>likes</i> ({{obj.likes}})
+                            </span>
+                            <div class="buttons">
+                                <form method="POST">
+                                    {% csrf_token %}
+                                    <input type="submit" value="Comment+Like" class="button">
+                                    <input type="hidden" name="comment_like" value="{{obj.id}}">
+                                </form>
+                                <form method="POST">
+                                    {% csrf_token %}
+                                    <input type="submit" value="Contacted" class="button">
+                                    <input type="hidden" name="contacted" value="{{obj.id}}">
+                                </form>
+                            </div>
+                            {% endif %}
+
+                            {% if category == 'contacted' %}
+                            <div class="buttons">
+                                <form method="POST">
+                                    {% csrf_token %}
+                                    <input type="submit" value="Disqualify" class="button" />
+                                    <input type="hidden" name="disqualified" value="{{obj.id}}" />
+                                </form>
+                                <form method="POST">
+                                    {% csrf_token %}
+                                    <input type="submit" value="Archived" class="button">
+                                    <input type="hidden" name="archived" value="{{obj.id}}">
+                                </form>
+                            </div>
+                            {% endif %}
+                        </li>
+                    {% empty %}
+                        <li>No results found.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+</form>
+{% endblock %}

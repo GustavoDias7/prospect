@@ -109,10 +109,14 @@ def disqualify(modeladmin, request, queryset):
 def qualify(modeladmin, request, queryset):
     queryset.update(qualified=True)
                 
-@admin.action(description="It was contacted", permissions=["change"])
+@admin.action(description="Contacted", permissions=["change"])
 def contacted(modeladmin, request, queryset):
     queryset.update(contacted=True)
-                
+                        
+@admin.action(description="Not contacted", permissions=["change"])
+def not_contacted(modeladmin, request, queryset):
+    queryset.update(contacted=False)
+       
 @admin.action(description="Archive contact", permissions=["change"])
 def archive(modeladmin, request, queryset):
     queryset.update(archived=True)

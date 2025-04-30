@@ -4,6 +4,7 @@ import datetime
 from pytz import timezone
 from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD, COLORS
 import random
+from django.urls import reverse
 
 # Create your models here.
 class Contact(models.Model):
@@ -265,6 +266,13 @@ class BusinessContactProxy(BusinessContact):
         proxy = True
         verbose_name = "Business Contact Interactions"
         
+class BusinessContactKaban(BusinessContact):
+    def get_admin_change_url(self):
+        return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
+    class Meta:
+        proxy = True
+        verbose_name = "Business Contact Kaban"
+        
 class Website(models.Model):
     website = models.CharField(max_length=200, unique=True, null=True, blank=True)
     qualified = models.BooleanField(default=None, null=True, blank=True)
@@ -440,7 +448,6 @@ class Post(models.Model):
             return f"id {self.id}: {short_phrase}"
         else: 
             return str(self.id)
-
 
 class PostGenerator(models.Model):
     phrases = models.TextField(max_length=1500)

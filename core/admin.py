@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.shortcuts import render
 from . import models, actions
 from django.utils.safestring import mark_safe
@@ -22,6 +22,9 @@ import cairosvg
 import re
 from moviepy.editor import AudioFileClip, ImageClip
 from moviepy.audio.fx import audio_normalize, volumex
+from django.utils.translation import gettext_lazy as _
+from django.urls import reverse
+from django.utils.html import format_html
 
 # data, rate = sf.read("test.wav") # load audio (with shape (samples, channels))
 # meter = pyln.Meter(rate) # create BS.1770 meter
@@ -404,7 +407,7 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     list_display = ["id", "instagram", "cellphone_"]
-    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
+    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.not_contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
     change_list_template = 'admin/businesscontact_proxy_change_form.html'
     form = forms.BusinessContactProxyForm
     
@@ -436,6 +439,204 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
             contact.save()
             
         return super().changelist_view(request, extra_context) 
+    
+    def get_list_display(self, request):
+        list_display = list(super().get_list_display(request))
+        
+        def follow_contact(self):
+            csrf_token = get_token(request)
+            button_html = f'<input type="submit" value="Follow" style="padding: 8px 12px;" />'
+            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+            field = f'<input type="hidden" name="followed" value="{self.id}" />'
+            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+            html = form_html
+            return mark_safe(html)
+
+        list_display.append("followed")
+        list_display.append(follow_contact)
+        
+        def one_more_like(self):
+            csrf_token = get_token(request)
+            button_html = f'<input type="submit" value="+1 like" style="padding: 8px 12px;" />'
+            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+            field = f'<input type="hidden" name="likes" value="{self.id}" />'
+            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+            html = form_html
+            return mark_safe(html)
+
+        list_display.append("likes")
+        list_display.append(one_more_like)
+        
+        def one_more_comment(self):
+            csrf_token = get_token(request)
+            button_html = f'<input type="submit" value="+1 comment" style="padding: 8px 12px;" />'
+            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+            field = f'<input type="hidden" name="comments" value="{self.id}" />'
+            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+            html = form_html
+            return mark_safe(html)
+
+        list_display.append("comments")
+        list_display.append(one_more_comment)
+        
+        list_display.append("last_post_")
+
+        return list_display
+       
+    @admin.display(description='cellphone')
+    def cellphone_(self, obj):
+        if obj.cellphone:
+            if len(obj.cellphone) == 13: 
+                link_number = obj.get_whatsapp_link(add_message=False)
+                inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
+                link_number = obj.get_whatsapp_link(add_message=False)
+                inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
+                link_number = obj.get_whatsapp_link(add_message=False)
+                inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
+                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+                return mark_safe(whatsapp)
+            else: 
+                return obj.cellphone
+        else:
+            return None
+    
+    @admin.display(description='instagram')
+    def instagram(self, obj):
+        if obj.name:
+            inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
+            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
+            return mark_safe(html)
+        elif obj.username:
+            inner_text = obj.username
+            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
+            return mark_safe(html)
+        else:
+            return "-"
+ 
+    @admin.display(description='last post')
+    def last_post_(self, obj):
+        if obj.last_post:
+            return obj.last_post.strftime("%b. %d, %Y")
+        else:
+            return "-"
+
+    class Media:
+        js = ('js/admin/instagram_contacts_proxy.js',)    
+    
+@admin.register(models.BusinessContactKaban)
+class BusinessContactKabanAdmin(admin.ModelAdmin):
+    search_fields = ["id", "username", "website", "cellphone", "decider__name"]
+    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
+    change_list_template = 'admin/businesscontact_kanban_change_list.html'
+    # change_list_results_template = 'admin/businesscontact_kanban_change_list_results.html'
+    form = forms.BusinessContactKabanForm
+    
+    def success_change_message(self, request, obj):
+        model_meta = obj._meta
+        url = reverse(f'admin:{model_meta.app_label}_{model_meta.model_name}_change', args=[obj.pk])
+        link = format_html('<a href="{}">{}</a>', url, obj)
+        model_name = model_meta.verbose_name
+        message = format_html( _('The {} "{}" was changed successfully.'), model_name, link)
+        messages.success(request, message)
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.filter(name__isnull=False, archived=False, qualified=True)
+        return qs
+    
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+        
+        is_followed = bool(request.POST.get("followed"))
+        if is_followed:
+            id = request.POST.get("followed")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.followed = True
+            contact.save()
+            self.success_change_message(request, contact)
+            
+        is_likes = bool(request.POST.get("likes"))
+        if is_likes:
+            id = request.POST.get("likes")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.likes = contact.likes + 1
+            contact.save()
+            self.success_change_message(request, contact)
+            
+        is_comments = bool(request.POST.get("comments"))
+        if is_comments:
+            id = request.POST.get("comments")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.comments = contact.comments + 1
+            contact.save()
+            self.success_change_message(request, contact)
+            
+        is_contacted = bool(request.POST.get("contacted"))
+        if is_contacted:
+            id = request.POST.get("contacted")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.contacted = True
+            contact.save()
+            self.success_change_message(request, contact)
+            
+        is_comment_like = bool(request.POST.get("comment_like"))
+        if is_comment_like:
+            id = request.POST.get("comment_like")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.comments = contact.comments + 1
+            contact.likes = contact.likes + 1
+            contact.save()
+            self.success_change_message(request, contact)
+            
+        is_disqualified = bool(request.POST.get("disqualified"))
+        if is_disqualified:
+            id = request.POST.get("disqualified")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.qualified = False
+            contact.save()
+            self.success_change_message(request, contact)
+            
+        is_archived = bool(request.POST.get("archived"))
+        if is_archived:
+            id = request.POST.get("archived")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.archived = True
+            contact.save()
+            self.success_change_message(request, contact)
+        
+        if hasattr(response, "context_data"):
+            cl = response.context_data['cl']
+            queryset = cl.queryset
+            
+            categorized_results = {
+                "qualified": [],
+                "followed": [], 
+                "interacted": [], 
+                "contacted": [],
+            }
+            
+            for obj in queryset:
+                # categories = [qualified, followed, interacted, contacted]
+                if obj.qualified:
+                    interacted = obj.comments > 0 or obj.likes > 0
+                    if obj.contacted and interacted and obj.followed:
+                        categorized_results["contacted"].append(obj)
+                    elif interacted and obj.followed:
+                        categorized_results["interacted"].append(obj)
+                    elif obj.followed:
+                        categorized_results["followed"].append(obj)
+                    elif obj.followed == False and interacted == False and obj.contacted == False:
+                        categorized_results["qualified"].append(obj)
+
+            response.context_data['categorized_results'] = categorized_results
+ 
+        return response
     
     def get_list_display(self, request):
         list_display = list(super().get_list_display(request))
