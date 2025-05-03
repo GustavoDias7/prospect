@@ -530,7 +530,7 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
         js = ('js/admin/instagram_contacts_proxy.js',)    
     
 @admin.register(models.BusinessContactKaban)
-class BusinessContactKabanAdmin(admin.ModelAdmin):
+class BusinessContactKabanAdmin(BusinessContactAdmin):
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
     change_list_template = 'admin/businesscontact_kanban_change_list.html'

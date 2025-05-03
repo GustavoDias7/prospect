@@ -155,12 +155,27 @@ class BusinessContact(models.Model):
     image3 = models.ImageField(null=True, blank=True)
     image4 = models.ImageField(null=True, blank=True)
     
+    def greeting_turn(self) -> str:
+        now = datetime.datetime.now(timezone('America/Sao_Paulo'))
+        
+        morning = now.hour >= 6 and now.hour <= 11
+        afternoon = now.hour >= 12 and now.hour <= 17
+        night = now.hour >= 18
+        turn = None
+        
+        if morning: turn = "bom dia"
+        elif afternoon: turn = "boa tarde"
+        elif night: turn = "boa noite"
+            
+        return turn
+        
+    
     def greeting(self):
         question = random.choice(["tudo bem", "tudo certo", "tudo certo por ai"])
-        hello = random.choice(["oi", "olá"])
+        hello = random.choice(["oi", "olá"]).capitalize()
         
         if self.name:
-            message = f"{hello.capitalize()} {self.name}, {question}?"
+            message = f"{hello} {self.name}, {question}?"
             now = datetime.datetime.now(timezone('America/Sao_Paulo'))
             
             morning = now.hour >= 6 and now.hour <= 11
@@ -168,15 +183,16 @@ class BusinessContact(models.Model):
             night = now.hour >= 18
             
             if morning:
-                message = f"{hello.capitalize()} {self.name}, bom dia!"
+                message = f"{hello} {self.name}, bom dia!"
             elif afternoon:
-                message = f"{hello.capitalize()} {self.name}, boa tarde!"
+                message = f"{hello} {self.name}, boa tarde!"
             elif night:
-                message = f"{hello.capitalize()} {self.name}, boa noite!"
+                message = f"{hello} {self.name}, boa noite!"
                 
             return message
         else:
-            message = f"{hello.capitalize()}, {question}?"
+            message = f"{hello}, {question}?"
+            
     
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.username}"

@@ -22,8 +22,8 @@ class BusinessContactKabanForm(forms.ModelForm):
         model = models.BusinessContactKaban
         fields = "__all__"
         
-    # class Media:
-    #     js = ('js/admin/instagram_contacts_proxy.js',)
+    class Media:
+        js = ('js/admin/instagram_contacts_kanban.js',)
         
 class TemplateForm(forms.ModelForm):
     class Meta:
