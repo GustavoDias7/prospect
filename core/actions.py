@@ -842,7 +842,7 @@ def handle_bitly_linktree(modeladmin, request, queryset):
     # query.save()
 
 @admin.action(description="Set the qualily of Instagram contact", permissions=["change"])
-def set_contact_quality(modeladmin, request, queryset):
+def set_contact_quality(modeladmin, request, queryset: QuerySet[models.Business]):
     options = Options()
     driver = webdriver.Firefox(options=options)
     driver.get("https://www.instagram.com/")
@@ -890,7 +890,7 @@ def set_contact_quality(modeladmin, request, queryset):
         
         print(f"{index + 1} of {len(queryset)}")
         print("name:", query.name)
-        print("username:", query.username)
+        print("username:", query.instagram_username)
         print("last post:", query.last_post.strftime("%b. %d, %Y"))
         print("cellphone:", query.fcellphone())
         print("telephone:", query.ftelephone())
@@ -1302,7 +1302,7 @@ def ignore_website(modeladmin, request, queryset):
         query.save()
 
 @admin.action(description="Check search engine", permissions=["change"])
-def check_search_engine(modeladmin, request, queryset):
+def check_search_engine(modeladmin, request, queryset: QuerySet[models.Business]):
     options = Options()
     driver = webdriver.Firefox(options=options)
     driver.set_window_size(652, 768 - 20)
@@ -1318,7 +1318,7 @@ def check_search_engine(modeladmin, request, queryset):
     for index, query in enumerate(queryset):
         print("=" * 32)
         print(f"{index + 1} of {len(queryset)} - id: {query.id}")
-        print(f"{' | '.join([query.name, query.username])}'")
+        print(f"{' | '.join([query.name, query.instagram_username])}'")
         print(f"{' | '.join([str(query.fcellphone()), str(query.get_cellphone_ddd())])}'")
         print(query.get_instagram_link())
         if query.address: print(query.address)
@@ -1326,7 +1326,7 @@ def check_search_engine(modeladmin, request, queryset):
         
         input_query = driver.find_element(By.CLASS_NAME, "query")
         input_query.clear()
-        search_query = f"'{query.name}' '{query.username}' "
+        search_query = f"'{query.name}' '{query.instagram_username}' "
         search_query = search_query + " ".join(map(lambda sm: f"-site:{sm}", social_media.values_list("website", flat=True)))
         
         input_query.send_keys(search_query)

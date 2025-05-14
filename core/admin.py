@@ -143,7 +143,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
             return "-"
 
 @admin.register(models.Business)
-class BusinessContactAdmin(admin.ModelAdmin):
+class BusinessAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
     list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_"]
     actions = [
@@ -160,7 +160,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
         actions.open_selenium,
         actions.check_search_engine
     ]
-    search_fields = ["id", "username", "website", "cellphone"]
+    search_fields = ["id", "instagram_username", "website", "cellphone"]
     autocomplete_fields = ["template"]
     change_form_template = 'admin/businesscontact_change_form.html'
     filter_horizontal = ('staff_members',)
@@ -323,28 +323,28 @@ class BusinessContactAdmin(admin.ModelAdmin):
                 html = " | ".join([html1]) + html_ddd
                 help_texts["help_texts"].update({"telephone": mark_safe(html)})
                 
-            if obj.username:
+            if obj.instagram_username:
                 href1 = obj.get_instagram_link()
                 html1 = f'<a href="{href1}" target="_blank">Instagram</a>'
-                href2 = f"https://ig.me/m/{obj.username}"
+                href2 = f"https://ig.me/m/{obj.instagram_username}"
                 html2 = f'<a href="{href2}" target="_blank">Instagram DM</a>'
-                href3 = f"https://duckduckgo.com/?t=ffab&q={obj.username}"
+                href3 = f"https://duckduckgo.com/?t=ffab&q={obj.instagram_username}"
                 html3 = f'<a href="{href3}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
                 html = " | ".join([html1, html2, html3])
-                help_texts["help_texts"].update({"username": mark_safe(html)}) 
+                help_texts["help_texts"].update({"instagram_username": mark_safe(html)}) 
                 
             kwargs.update(help_texts)
                 
         return super().get_form(request, obj, **kwargs)
     
     @admin.display(description='instagram')
-    def instagram(self, obj):
+    def instagram(self, obj: models.Business):
         if obj.name:
             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
-        elif obj.username:
-            inner_text = obj.username
+        elif obj.instagram_username:
+            inner_text = obj.instagram_username
             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
@@ -540,9 +540,9 @@ class BusinessContactAdmin(admin.ModelAdmin):
 #         js = ('js/admin/instagram_contacts_proxy.js',)    
     
 @admin.register(models.BusinessKanban)
-class BusinessKanbanAdmin(BusinessContactAdmin):
+class BusinessKanbanAdmin(BusinessAdmin):
     list_filter = []
-    search_fields = ["id", "username", "website", "cellphone"]
+    search_fields = ["id", "instagram_username", "website", "cellphone"]
     actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.responded, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
     change_list_template = 'admin/businesscontact_kanban_change_list.html'
     form = forms.BusinessKanbanForm
@@ -754,13 +754,13 @@ class BusinessKanbanAdmin(BusinessContactAdmin):
             return None
     
     @admin.display(description='instagram')
-    def instagram(self, obj):
+    def instagram(self, obj: models.Business):
         if obj.name:
             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
-        elif obj.username:
-            inner_text = obj.username
+        elif obj.instagram_username:
+            inner_text = obj.instagram_username
             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         else:
@@ -780,36 +780,36 @@ class BusinessInline(admin.StackedInline):
     model = models.Business
     extra = 0
     
-    def get_formset(self, request, obj=None, **kwargs):
+    def get_formset(self, request, obj:models.StaffMember=None, **kwargs):
         help_texts = { "help_texts": {} }
         if obj:
             try:
-                business_contact = self.model.objects.get(decider=obj)
+                business = self.model.objects.get(staff_member=obj)
             except Exception as e:
-                business_contact = None
+                business = None
                 print(e)
-            if business_contact:
-                if business_contact.name:
-                    help_text1 = f"https://casadosdados.com.br/solucao/cnpj?q={business_contact.name}"
+            if business:
+                if business.name:
+                    help_text1 = f"https://casadosdados.com.br/solucao/cnpj?q={business.name}"
                     html1 = f'<a href="{help_text1}" target="_blank" style="font-size: 12px;">casadosdados</a>'
-                    help_text2 = f"https://duckduckgo.com/?t=ffab&q={business_contact.name}"
+                    help_text2 = f"https://duckduckgo.com/?t=ffab&q={business.name}"
                     html2 = f'<a href="{help_text2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
                     html3 = "<a href='/' id='id_name_copy_business'>Copy name</a>"
                     html = f" | ".join([html1, html2, html3])
                     help_texts["help_texts"].update({"name": mark_safe(html)})
                     
-                if business_contact.cellphone:
-                    href1 = business_contact.get_whatsapp_link(add_message=False)
-                    html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{business_contact.fcellphone()}</a>'
-                    html_ddd = f'<span style="font-size: 14px;">{business_contact.get_cellphone_ddd()}</span>'
+                if business.cellphone:
+                    href1 = business.get_whatsapp_link(add_message=False)
+                    html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{business.fcellphone()}</a>'
+                    html_ddd = f'<span style="font-size: 14px;">{business.get_cellphone_ddd()}</span>'
                     html = " | ".join([html1, html_ddd])
                     help_texts["help_texts"].update({"cellphone": mark_safe(html)}) 
                     
-                if business_contact.username:
-                    help_text = business_contact.get_instagram_link()
+                if business.instagram_username:
+                    help_text = business.get_instagram_link()
                     html1 = f'<a href="{help_text}" target="_blank" style="font-size: 12px;">Instagram</a>'
                     html = " | ".join([html1])
-                    help_texts["help_texts"].update({"username": mark_safe(html)}) 
+                    help_texts["help_texts"].update({"instagram_username": mark_safe(html)}) 
                     
                 kwargs.update(help_texts)
                 
@@ -854,10 +854,9 @@ class QualifiedListFilter(admin.SimpleListFilter):
         
 @admin.register(models.StaffMember)
 class StaffMemberAdmin(admin.ModelAdmin):
-    list_display = ["id", "name_", "business_contact_", "phone_", "email", "instagram_", "contacted"]
+    list_display = ["id", "name_", "phone_", "email", "instagram_", "contacted"]
     search_fields = ["id", "name", "email"]
     list_filter = ["contacted", QualifiedListFilter]
-    # inlines = [BusinessInline]
     actions = [actions.follow, actions.open_link, actions.copy_name, actions.contacted, actions.qualify]
     change_form_template = 'admin/decider.html'
     form = forms.StaffMemberForm
@@ -1017,19 +1016,6 @@ class StaffMemberAdmin(admin.ModelAdmin):
         else:
             return "-"
     
-    @admin.display(description='Business contact')
-    def business_contact_(self, obj: models.StaffMember):
-        try:    
-            business_contact = models.Business.objects.filter(staffmember__id=obj.id)[0]
-            if business_contact:
-                inner_text = business_contact.name
-                href = f"/admin/core/Business/{business_contact.id}/change/"
-                html = f'<a href="{href}" target="_blank">{inner_text}</a>'
-                return mark_safe(html)
-            else:
-                return "-"
-        except Exception as e:
-            return "-"
 
 @admin.register(models.StaffMemberType)
 class StaffMemberTypeAdmin(admin.ModelAdmin):

@@ -133,7 +133,8 @@ class StaffMemberType(models.Model):
 class Business(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     cnpj = models.CharField(max_length=18, null=True, blank=True)
-    username = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    instagram_username = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    facebook_username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     cellphone = models.CharField(max_length=13, null=True, blank=True)
     telephone = models.CharField(max_length=12, null=True, blank=True)
     website = models.URLField(max_length=200, null=True, blank=True)
@@ -199,7 +200,7 @@ class Business(models.Model):
             message = f"{hello}, {question}?"
             
     def get_instagram_link(self):
-        return f"https://www.instagram.com/{self.username}"
+        return f"https://www.instagram.com/{self.instagram_username}"
     
     def get_whatsapp_link(self, add_message: bool | None = True):
         phone = remove_non_numeric(self.cellphone or self.telephone)
@@ -268,12 +269,12 @@ class Business(models.Model):
         business = random.choice(["negócio", "estabelecimento"])
         message = f"do seu {business}"
         
-        if self.name and self.username:
-            if has_string_in_list("pizza", [self.name, self.username]):
+        if self.name and self.instagram_username:
+            if has_string_in_list("pizza", [self.name, self.instagram_username]):
                 message = "da sua pizzaria"
-            elif has_string_in_list("hambúrguer", [self.name, self.username]):
+            elif has_string_in_list("hambúrguer", [self.name, self.instagram_username]):
                 message = "da sua hamburgueria"
-            elif has_string_in_list("restaurante", [self.name, self.username]):
+            elif has_string_in_list("restaurante", [self.name, self.instagram_username]):
                 message = "do seu restaurante"
             
         return message
@@ -285,7 +286,7 @@ class Business(models.Model):
             return datetime.datetime.now().date() > self.move_date.date()
     
     def __str__(self):
-        if self.username: return self.username
+        if self.instagram_username: return self.instagram_username
         else: return f"Instagram {self.id}"
     
     class Meta:

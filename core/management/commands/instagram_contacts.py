@@ -50,11 +50,11 @@ class Command(BaseCommand):
             contacts = []
             for link in links:
                 href = urllib.parse.urlparse(link.get_attribute("href"))
-                contact = Business()
+                business = Business()
                 username = href.path.split("/")[1]
                 if username in ("reel", "tv", "c", "p", "stories"): continue
-                contact.username = username
-                contacts.append(contact)
+                business.instagram_username = username
+                contacts.append(business)
                 
             Business.objects.bulk_create(contacts, ignore_conflicts=True)
                 
