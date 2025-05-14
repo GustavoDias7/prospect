@@ -33,9 +33,9 @@ class TemplateForm(forms.ModelForm):
     class Media:
         js = ('js/admin/template.js',)
         
-class DeciderForm(forms.ModelForm):
+class StaffMemberForm(forms.ModelForm):
     class Meta:
-        model = models.Decider
+        model = models.StaffMember
         fields = "__all__"
         
     class Media:

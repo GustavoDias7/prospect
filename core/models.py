@@ -16,7 +16,7 @@ class Contact(models.Model):
     website = models.URLField(max_length=200, null=True, blank=True)
     instagram = models.CharField(max_length=30, null=True, blank=True)
     qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
-    decider = models.OneToOneField(to="Decider", on_delete=models.SET_NULL, null=True, blank=True)
+    staff_member = models.OneToOneField(to="StaffMember", on_delete=models.SET_NULL, null=True, blank=True)
     
     def get_facebook(self):
         return f"https://facebook.com{self.facebook_page}"
@@ -34,7 +34,7 @@ class Contact(models.Model):
         if self.name: return self.name
         else: return f"Contact {self.id}"
         
-class Decider(models.Model):
+class StaffMember(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     cnpj = models.CharField(max_length=18, null=True, blank=True)
     phone = models.CharField(max_length=13, null=True, blank=True)
@@ -125,8 +125,6 @@ class Decider(models.Model):
         if self.name: return self.name
         else: return f"Decider {self.id}"
         
-# class SeleniumDriver(models.Model):
-#     name = models.CharField(max_length=50, null=True, blank=True)
 
 class Business(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
@@ -139,7 +137,8 @@ class Business(models.Model):
     email = models.EmailField(null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
     qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
-    decider = models.OneToOneField(to="Decider", on_delete=models.SET_NULL, null=True, blank=True)
+    # decider = models.OneToOneField(to="Decider", on_delete=models.SET_NULL, null=True, blank=True)
+    staff_members = models.ManyToManyField(to=StaffMember, blank=True, related_name="staff_member")
     contacted = models.BooleanField(default=False)
     last_post = models.DateTimeField(default=None, null=True, blank=True)
     archived = models.BooleanField(default=False)

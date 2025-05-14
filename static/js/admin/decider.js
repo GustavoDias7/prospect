@@ -24,59 +24,61 @@ window.addEventListener("load", function () {
     }) {
       const button = document.getElementById(button_id);
       const field = document.getElementById(field_id);
-      button.addEventListener("click", (event) => {
-        event.preventDefault()
-        let text = ""
-        
-        if (first_word) {
-          if (field.innerText) {
-            text = field.innerText.trim().split(" ")[0]
-          } else if (field.value) {
-            text = field.value.trim().split(" ")[0]
-          }
-        } else {
-          if (field.innerText) {
-            text = field.innerText.trim()
-          } else if (field.value) {
-            text = field.value.trim()
-          }
-        }
-
-        if (message) {
-          let formatted_message = ""
-
-          if (message.includes("{field_value}")) {
-            formatted_message = message.replace("{field_value}", text)
-          }
-
-          let shift = ""
-          if (message.includes("{shift}")) {
-            const now = new Date()
-            const hour = now.getHours()
-            const morning = hour >= 6 && hour <= 11
-            const afternoon = hour >= 12 && hour <= 17
-            const night = hour >= 18
-            
-            if (morning) {
-              shift = "bom dia"
-            } else if (afternoon) {
-              shift = "boa tarde"
-            } else if (night) {
-              shift = "boa noite"
+      if (button) {
+        button.addEventListener("click", (event) => {
+          event.preventDefault()
+          let text = ""
+          
+          if (first_word) {
+            if (field.innerText) {
+              text = field.innerText.trim().split(" ")[0]
+            } else if (field.value) {
+              text = field.value.trim().split(" ")[0]
             }
-            
-            formatted_message = formatted_message.replace("{shift}", shift)
+          } else {
+            if (field.innerText) {
+              text = field.innerText.trim()
+            } else if (field.value) {
+              text = field.value.trim()
+            }
           }
-
-          text = formatted_message
-        }
-
-        navigator.clipboard.writeText(lower ? text.toLowerCase() : text);
-        
-        if (is_alert) {
-          alert(`Copy content to clipboard: \n\n ${text}`)
-        }
-      })
+  
+          if (message) {
+            let formatted_message = ""
+  
+            if (message.includes("{field_value}")) {
+              formatted_message = message.replace("{field_value}", text)
+            }
+  
+            let shift = ""
+            if (message.includes("{shift}")) {
+              const now = new Date()
+              const hour = now.getHours()
+              const morning = hour >= 6 && hour <= 11
+              const afternoon = hour >= 12 && hour <= 17
+              const night = hour >= 18
+              
+              if (morning) {
+                shift = "bom dia"
+              } else if (afternoon) {
+                shift = "boa tarde"
+              } else if (night) {
+                shift = "boa noite"
+              }
+              
+              formatted_message = formatted_message.replace("{shift}", shift)
+            }
+  
+            text = formatted_message
+          }
+  
+          navigator.clipboard.writeText(lower ? text.toLowerCase() : text);
+          
+          if (is_alert) {
+            alert(`Copy content to clipboard: \n\n ${text}`)
+          }
+        })
+      }
     }
 
     async function asyncForEach(array, callback, ms) {

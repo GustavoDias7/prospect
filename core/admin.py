@@ -145,7 +145,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 @admin.register(models.Business)
 class BusinessContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
-    list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider_"]
+    list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_"]
     actions = [
         actions.test_chunk,
         actions.get_instagram_data, 
@@ -160,9 +160,10 @@ class BusinessContactAdmin(admin.ModelAdmin):
         actions.open_selenium,
         actions.check_search_engine
     ]
-    search_fields = ["id", "username", "website", "cellphone", "decider__name"]
-    autocomplete_fields = ["decider", "template"]
+    search_fields = ["id", "username", "website", "cellphone"]
+    autocomplete_fields = ["template"]
     change_form_template = 'admin/businesscontact_change_form.html'
+    filter_horizontal = ('staff_members',)
     form = forms.BusinessContactForm
     
     def response_change(self, request, obj: models.Business):
@@ -401,147 +402,147 @@ class BusinessContactAdmin(admin.ModelAdmin):
         else:
             return None
 
-    @admin.display(description='decider')
-    def decider_(self, obj: models.Business):
-        if obj.decider:
-            inner_text = obj.decider.name
-            href = f"/admin/core/decider/{obj.decider.id}/change/"
-            html = f'<a href="{href}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        else:
-            return "-"
+    # @admin.display(description='decider')
+    # def decider_(self, obj: models.Business):
+    #     if obj.decider:
+    #         inner_text = obj.decider.name
+    #         href = f"/admin/core/decider/{obj.decider.id}/change/"
+    #         html = f'<a href="{href}" target="_blank">{inner_text}</a>'
+    #         return mark_safe(html)
+    #     else:
+    #         return "-"
 
 # @admin.register(models.BusinessContactProxy)
-class BusinessContactProxyAdmin(admin.ModelAdmin):
-    list_filter = ["qualified", "contacted", "archived", "followed"]
-    search_fields = ["id", "username", "website", "cellphone", "decider__name"]
-    list_display = ["id", "instagram", "cellphone_"]
-    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.not_contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
-    change_list_template = 'admin/businesscontact_proxy_change_form.html'
-    form = forms.BusinessContactProxyForm
+# class BusinessContactProxyAdmin(admin.ModelAdmin):
+#     list_filter = ["qualified", "contacted", "archived", "followed"]
+#     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
+#     list_display = ["id", "instagram", "cellphone_"]
+#     actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.not_contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
+#     change_list_template = 'admin/businesscontact_proxy_change_form.html'
+#     form = forms.BusinessContactProxyForm
     
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        qs = qs.filter(name__isnull=False)
-        return qs
+#     def get_queryset(self, request):
+#         qs = super().get_queryset(request)
+#         qs = qs.filter(name__isnull=False)
+#         return qs
     
-    def changelist_view(self, request, extra_context=None):
-        is_likes = bool(request.POST.get("followed"))
-        if is_likes:
-            id = request.POST.get("followed")
-            contact = models.Business.objects.get(id=id)
-            contact.followed = True
-            contact.save()
+#     def changelist_view(self, request, extra_context=None):
+#         is_likes = bool(request.POST.get("followed"))
+#         if is_likes:
+#             id = request.POST.get("followed")
+#             contact = models.Business.objects.get(id=id)
+#             contact.followed = True
+#             contact.save()
             
-        is_likes = bool(request.POST.get("likes"))
-        if is_likes:
-            id = request.POST.get("likes")
-            contact = models.Business.objects.get(id=id)
-            contact.likes = contact.likes + 1
-            contact.save()
+#         is_likes = bool(request.POST.get("likes"))
+#         if is_likes:
+#             id = request.POST.get("likes")
+#             contact = models.Business.objects.get(id=id)
+#             contact.likes = contact.likes + 1
+#             contact.save()
             
-        is_comments = bool(request.POST.get("comments"))
-        if is_comments:
-            id = request.POST.get("comments")
-            contact = models.Business.objects.get(id=id)
-            contact.comments = contact.comments + 1
-            contact.save()
+#         is_comments = bool(request.POST.get("comments"))
+#         if is_comments:
+#             id = request.POST.get("comments")
+#             contact = models.Business.objects.get(id=id)
+#             contact.comments = contact.comments + 1
+#             contact.save()
             
-        return super().changelist_view(request, extra_context) 
+#         return super().changelist_view(request, extra_context) 
     
-    def get_list_display(self, request):
-        list_display = list(super().get_list_display(request))
+#     def get_list_display(self, request):
+#         list_display = list(super().get_list_display(request))
         
-        def follow_contact(self):
-            csrf_token = get_token(request)
-            button_html = f'<input type="submit" value="Follow" style="padding: 8px 12px;" />'
-            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-            field = f'<input type="hidden" name="followed" value="{self.id}" />'
-            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-            html = form_html
-            return mark_safe(html)
+#         def follow_contact(self):
+#             csrf_token = get_token(request)
+#             button_html = f'<input type="submit" value="Follow" style="padding: 8px 12px;" />'
+#             csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+#             field = f'<input type="hidden" name="followed" value="{self.id}" />'
+#             form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+#             html = form_html
+#             return mark_safe(html)
 
-        list_display.append("followed")
-        list_display.append(follow_contact)
+#         list_display.append("followed")
+#         list_display.append(follow_contact)
         
-        def one_more_like(self):
-            csrf_token = get_token(request)
-            button_html = f'<input type="submit" value="+1 like" style="padding: 8px 12px;" />'
-            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-            field = f'<input type="hidden" name="likes" value="{self.id}" />'
-            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-            html = form_html
-            return mark_safe(html)
+#         def one_more_like(self):
+#             csrf_token = get_token(request)
+#             button_html = f'<input type="submit" value="+1 like" style="padding: 8px 12px;" />'
+#             csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+#             field = f'<input type="hidden" name="likes" value="{self.id}" />'
+#             form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+#             html = form_html
+#             return mark_safe(html)
 
-        list_display.append("likes")
-        list_display.append(one_more_like)
+#         list_display.append("likes")
+#         list_display.append(one_more_like)
         
-        def one_more_comment(self):
-            csrf_token = get_token(request)
-            button_html = f'<input type="submit" value="+1 comment" style="padding: 8px 12px;" />'
-            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-            field = f'<input type="hidden" name="comments" value="{self.id}" />'
-            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-            html = form_html
-            return mark_safe(html)
+#         def one_more_comment(self):
+#             csrf_token = get_token(request)
+#             button_html = f'<input type="submit" value="+1 comment" style="padding: 8px 12px;" />'
+#             csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
+#             field = f'<input type="hidden" name="comments" value="{self.id}" />'
+#             form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
+#             html = form_html
+#             return mark_safe(html)
 
-        list_display.append("comments")
-        list_display.append(one_more_comment)
+#         list_display.append("comments")
+#         list_display.append(one_more_comment)
         
-        list_display.append("last_post_")
+#         list_display.append("last_post_")
 
-        return list_display
+#         return list_display
        
-    @admin.display(description='cellphone')
-    def cellphone_(self, obj):
-        if obj.cellphone:
-            if len(obj.cellphone) == 13: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            else: 
-                return obj.cellphone
-        else:
-            return None
+#     @admin.display(description='cellphone')
+#     def cellphone_(self, obj):
+#         if obj.cellphone:
+#             if len(obj.cellphone) == 13: 
+#                 link_number = obj.get_whatsapp_link(add_message=False)
+#                 inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
+#                 whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+#                 return mark_safe(whatsapp)
+#             if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
+#                 link_number = obj.get_whatsapp_link(add_message=False)
+#                 inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
+#                 whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+#                 return mark_safe(whatsapp)
+#             elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
+#                 link_number = obj.get_whatsapp_link(add_message=False)
+#                 inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
+#                 whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+#                 return mark_safe(whatsapp)
+#             else: 
+#                 return obj.cellphone
+#         else:
+#             return None
     
-    @admin.display(description='instagram')
-    def instagram(self, obj):
-        if obj.name:
-            inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
-            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        elif obj.username:
-            inner_text = obj.username
-            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        else:
-            return "-"
+#     @admin.display(description='instagram')
+#     def instagram(self, obj):
+#         if obj.name:
+#             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
+#             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
+#             return mark_safe(html)
+#         elif obj.username:
+#             inner_text = obj.username
+#             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
+#             return mark_safe(html)
+#         else:
+#             return "-"
  
-    @admin.display(description='last post')
-    def last_post_(self, obj):
-        if obj.last_post:
-            return obj.last_post.strftime("%b. %d, %Y")
-        else:
-            return "-"
+#     @admin.display(description='last post')
+#     def last_post_(self, obj):
+#         if obj.last_post:
+#             return obj.last_post.strftime("%b. %d, %Y")
+#         else:
+#             return "-"
 
-    class Media:
-        js = ('js/admin/instagram_contacts_proxy.js',)    
+#     class Media:
+#         js = ('js/admin/instagram_contacts_proxy.js',)    
     
 @admin.register(models.BusinessKanban)
 class BusinessKanbanAdmin(BusinessContactAdmin):
     list_filter = []
-    search_fields = ["id", "username", "website", "cellphone", "decider__name"]
+    search_fields = ["id", "username", "website", "cellphone"]
     actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.responded, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
     change_list_template = 'admin/businesscontact_kanban_change_list.html'
     form = forms.BusinessKanbanForm
@@ -775,7 +776,7 @@ class BusinessKanbanAdmin(BusinessContactAdmin):
     class Media:
         js = ('js/admin/instagram_contacts_change_list_kanban.js',)    
 
-class BusinessContactInline(admin.StackedInline):
+class BusinessInline(admin.StackedInline):
     model = models.Business
     extra = 0
     
@@ -851,15 +852,15 @@ class QualifiedListFilter(admin.SimpleListFilter):
         else:
             return queryset.all()
         
-@admin.register(models.Decider)
-class DeciderAdmin(admin.ModelAdmin):
+@admin.register(models.StaffMember)
+class StaffMemberAdmin(admin.ModelAdmin):
     list_display = ["id", "name_", "business_contact_", "phone_", "email", "instagram_", "contacted"]
     search_fields = ["id", "name", "email"]
     list_filter = ["contacted", QualifiedListFilter]
-    inlines = [BusinessContactInline]
+    # inlines = [BusinessInline]
     actions = [actions.follow, actions.open_link, actions.copy_name, actions.contacted, actions.qualify]
     change_form_template = 'admin/decider.html'
-    form = forms.DeciderForm
+    form = forms.StaffMemberForm
     
     def get_form(self, request, obj=None, **kwargs):
         help_texts = { "help_texts": {} }
@@ -911,9 +912,12 @@ class DeciderAdmin(admin.ModelAdmin):
             
         return super().get_form(request, obj, **kwargs)
     
-    def response_change(self, request, obj: models.Decider):
+    def response_change(self, request, obj: models.StaffMember):
         is_image = bool(request.POST.get("generate_image"))
-        business_contact = models.Business.objects.filter(decider__id=obj.id)[0]
+        try:
+            business_contact = models.Business.objects.filter(decider__id=obj.id)[0]
+        except:
+            business_contact = None
         
         if is_image and obj:
             dimentions = get_dimentions("9:16", 1280, int)
@@ -963,7 +967,7 @@ class DeciderAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         
         try:
-            business_contact = models.Business.objects.get(decider__id=object_id)
+            business_contact = models.Business.objects.get(staffmember__id=object_id)
             extra_context["business_contact"] = business_contact
             if business_contact.template:
                 template = Template(business_contact.template.message)
@@ -972,7 +976,7 @@ class DeciderAdmin(admin.ModelAdmin):
                 extra_context["template"] = rendered_content
             else:
                 extra_context["template"] = None
-        except ObjectDoesNotExist:
+        except:
             extra_context["template"] = None
         
         return super().change_view(
@@ -1013,9 +1017,9 @@ class DeciderAdmin(admin.ModelAdmin):
             return "-"
     
     @admin.display(description='Business contact')
-    def business_contact_(self, obj: models.Decider):
+    def business_contact_(self, obj: models.StaffMember):
         try:    
-            business_contact = models.Business.objects.filter(decider__id=obj.id)[0]
+            business_contact = models.Business.objects.filter(staffmember__id=obj.id)[0]
             if business_contact:
                 inner_text = business_contact.name
                 href = f"/admin/core/Business/{business_contact.id}/change/"
