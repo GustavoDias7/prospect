@@ -862,7 +862,7 @@ class StaffMemberAdmin(admin.ModelAdmin):
     change_form_template = 'admin/decider.html'
     form = forms.StaffMemberForm
     
-    def get_form(self, request, obj=None, **kwargs):
+    def get_form(self, request, obj:models.StaffMember=None, **kwargs):
         help_texts = { "help_texts": {} }
         if obj:
             if obj.name:
@@ -895,7 +895,8 @@ class StaffMemberAdmin(admin.ModelAdmin):
                     
             if obj.email:
                 html1 = "<a href='/' id='id_email_copy_business'>Copy e-mail</a>"
-                html = f" | ".join([html1])
+                html2 = "<a href='/' id='id_email_normalize'>Lower case</a>"
+                html = f" | ".join([html1, html2])
                 help_texts["help_texts"].update({"email": mark_safe(html)})
             
             if obj.instagram:
@@ -1029,6 +1030,10 @@ class StaffMemberAdmin(admin.ModelAdmin):
                 return "-"
         except Exception as e:
             return "-"
+
+@admin.register(models.StaffMemberType)
+class StaffMemberTypeAdmin(admin.ModelAdmin):
+    pass
 
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):

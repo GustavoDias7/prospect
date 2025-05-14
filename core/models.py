@@ -36,14 +36,16 @@ class Contact(models.Model):
         
 class StaffMember(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
+    type = models.ForeignKey(to="StaffMemberType", on_delete=models.SET_NULL, null=True, blank=True)
     cnpj = models.CharField(max_length=18, null=True, blank=True)
     phone = models.CharField(max_length=13, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     instagram = models.CharField(max_length=30, null=True, blank=True)
+    facebook = models.CharField(max_length=30, null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
-    color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
     contacted = models.BooleanField(default=False)
-    # observation = models.TextField(max_length=250, null=True, blank=True)
+    is_trusty = models.BooleanField(default=False, verbose_name="trusty")
+    observation = models.TextField(max_length=400, null=True, blank=True)
     
     def get_whatsapp_link(self, add_message: bool | None = True):
         phone = remove_non_numeric(self.phone)
@@ -125,7 +127,9 @@ class StaffMember(models.Model):
         if self.name: return self.name
         else: return f"Decider {self.id}"
         
-
+class StaffMemberType(models.Model):
+    name = models.CharField(max_length=50, null=True, blank=True)
+    
 class Business(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     cnpj = models.CharField(max_length=18, null=True, blank=True)
