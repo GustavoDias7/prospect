@@ -171,7 +171,12 @@ def get_instagram_data(modeladmin, request, queryset):
     for index, query in enumerate(queryset):
         print("=============================")
         print(f"{index + 1} of {len(queryset)} - id: {query.id}")
-        driver.get(query.get_instagram_link())
+        try:
+            driver.get(query.get_instagram_link())
+        except Exception as e:
+            print(e)
+            time.sleep(10)
+            driver.get(query.get_instagram_link())
             
         time.sleep(10)
         
@@ -571,12 +576,28 @@ def get_instagram_data(modeladmin, request, queryset):
         print("=============================")
 
         my_index = index + 1
-        len_chunck = 20
-        chunk = my_index % len_chunck == 0
+        len_chunk = 20
+        chunk = my_index % len_chunk == 0
         not_last = my_index != len(queryset)
-        if chunk and not_last: time.sleep(60 * 5)
+        if chunk and not_last: 
+            print("wating...")
+            time.sleep(60 * 5) 
+            print("contining")
         
     driver.close()
+
+@admin.action(description="Test chunk", permissions=["change"])
+def test_chunk(modeladmin, request, queryset):
+    for index, query in enumerate(queryset):
+        print(f"{index + 1} of {len(queryset)}")
+        my_index = index + 1
+        len_chunk = 20
+        chunk = my_index % len_chunk == 0
+        not_last = my_index != len(queryset)
+        if chunk and not_last: 
+            print("wating...")
+            time.sleep(5) 
+            print("contining")
 
 @admin.action(description="Get data from the LinkedIn profile", permissions=["change"])
 def get_linkedin_data(modeladmin, request, queryset):
@@ -1235,10 +1256,16 @@ def unfollow(modeladmin, request, queryset):
 
 
 @admin.action(description="Comment and like post", permissions=["change"])
-def comment_and_like(modeladmin, request, queryset):
+def comment_and_like(modeladmin, request, queryset: QuerySet[models.BusinessContact]):
     for index, query in enumerate(queryset):
         query.comments = query.comments + 1
         query.likes = query.likes + 1
+        query.save()
+        
+@admin.action(description="Responded", permissions=["change"])
+def responded(modeladmin, request, queryset: QuerySet[models.BusinessContact]):
+    for index, query in enumerate(queryset):
+        query.interaction_responses = query.interaction_responses + 1
         query.save()
  
 @admin.action(description="Like post", permissions=["change"])

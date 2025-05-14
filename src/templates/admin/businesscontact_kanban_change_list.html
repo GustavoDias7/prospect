@@ -36,6 +36,10 @@
         .custom-results-card .buttons form {
             flex-grow: 1;
         }
+        .custom-results-card-status span img {
+            position: relative;
+            top: 2px;
+        }
         .copy_comment {
             display: flex;
             align-items: center;
@@ -53,6 +57,11 @@
             position: fixed;
             right: 32px;
             bottom: 32px;
+        }
+        h2.category-header {
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
     </style>
 {% endblock %}
@@ -75,66 +84,81 @@
             <form></form>
             {% for category, objects in categorized_results.items %}
             <div>
-                <h2>{{ category|title }} ({{objects|length}})</h2>
-                <ul class="custom-results-card">
-                    {% for obj in objects %}
+                <h2 class="category-header" id="category-header-{{category}}">
+                    <input type="checkbox" name="checkbox-{{category}}" id="checkbox-{{category}}">
+                    <span>{{ objects.verbose_name|title }} ({{objects.items|length}})</span>
+                    <div>| max ({{objects.max_length}})</div>
+                </h2>
+                <ul class="custom-results-card" id="custom-results-card-{{category}}">
+                    {% for obj in objects.items %}
                         <li>
                             <span>
-                                <input type="checkbox" name="_selected_action" value="{{ obj.id }}" class="action-select" aria-label="Select this object for an action - ofner">
+                                <input type="checkbox" name="_selected_action" value="{{ obj.id }}" class="action-select action-select-{{category}}" id="action-select-{{category}}-{{ obj.id }}" aria-label="Select this object for an action - ofner">
                                 [<a href="{{obj.get_admin_change_url}}">{{ obj.id }}</a>]
                                 <a href="{{obj.get_instagram_link}}" target="_blank">{{ obj.username }}</a>
                             </span>
-
-                            {% if category == 'followed' %}
-                            <form method="POST" style="width: 100%;">
-                                {% csrf_token %}
-                                <input type="submit" value="Comment+Like" class="button">
-                                <input type="hidden" name="comment_like" value="{{obj.id}}">
-                            </form>
-                            {% endif %}
-
-                            {% if category == 'qualified' %}
-                            <form method="POST">
-                                {% csrf_token %}
-                                <input type="submit" value="Follow" class="button">
-                                <input type="hidden" name="followed" value="{{obj.id}}">
-                            </form>
-                            {% endif %}
-
-                            {% if category == 'interacted' %}
                             <br>
-                            <span>
-                                <i>comments</i> ({{obj.comments}}) | 
-                                <i>likes</i> ({{obj.likes}})
+                            <span class="custom-results-card-status">
+                                <span>
+                                    <i>cmmt</i> ({{obj.comments}}) 
+                                </span>
+                                <span>
+                                    <i>like</i> ({{obj.likes}})
+                                </span>
+                                <span>
+                                    <i>res</i> (<img src="
+                                    {% if obj.interaction_responses %}
+                                        /static/admin/img/icon-yes.svg
+                                    {% else %}
+                                        /static/admin/img/icon-no.svg
+                                    {% endif %}
+                                    " />) 
+                                </span>
                             </span>
                             <div class="buttons">
-                                <form method="POST">
-                                    {% csrf_token %}
-                                    <input type="submit" value="Comment+Like" class="button">
-                                    <input type="hidden" name="comment_like" value="{{obj.id}}">
-                                </form>
-                                <form method="POST">
-                                    {% csrf_token %}
-                                    <input type="submit" value="Contacted" class="button">
-                                    <input type="hidden" name="contacted" value="{{obj.id}}">
-                                </form>
-                            </div>
-                            {% endif %}
+                                <br>
+                                {% if objects.next_button and obj.is_tomorrow_or_later %}
+                                    {% if category == 'qualified' %}
+                                    <form method="POST">
+                                        {% csrf_token %}
+                                        <input type="submit" value="First interaction" class="button">
+                                        <input type="hidden" name="comment_like" value="{{obj.id}}">
+                                    </form>
+                                    {% endif %}
 
-                            {% if category == 'contacted' %}
-                            <div class="buttons">
+                                    {% if category == 'interacted' or  category == 'interacted2' %}
+                                    <form method="POST">
+                                        {% csrf_token %}
+                                        <input type="submit" value="Second interaction" class="button">
+                                        <input type="hidden" name="comment_like" value="{{obj.id}}">
+                                    </form>
+                                    {% endif %}
+
+                                    {% if category == 'responded' %}
+                                    <form method="POST">
+                                        {% csrf_token %}
+                                        <input type="submit" value="+Interaction" class="button">
+                                        <input type="hidden" name="comment_like" value="{{obj.id}}">
+                                    </form>
+                                    {% endif %}
+                                {% endif %}
+
+                                {% if category == 'interacted' or  category == 'interacted2' or category == 'responded' %}
                                 <form method="POST">
                                     {% csrf_token %}
-                                    <input type="submit" value="Disqualify" class="button" />
-                                    <input type="hidden" name="disqualified" value="{{obj.id}}" />
+                                    <input type="submit" value="Responded" class="button">
+                                    <input type="hidden" name="responded" value="{{obj.id}}">
                                 </form>
+                                {% endif %}
+
+                                {% if category == 'contacted' %}
                                 <form method="POST">
                                     {% csrf_token %}
                                     <input type="submit" value="Archived" class="button">
                                     <input type="hidden" name="archived" value="{{obj.id}}">
                                 </form>
+                                {% endif %}
                             </div>
-                            {% endif %}
                         </li>
                     {% empty %}
                         <li>No results found.</li>

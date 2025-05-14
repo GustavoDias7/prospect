@@ -25,6 +25,7 @@ from moviepy.audio.fx import audio_normalize, volumex
 from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 from django.utils.html import format_html
+from datetime import datetime
 
 # data, rate = sf.read("test.wav") # load audio (with shape (samples, channels))
 # meter = pyln.Meter(rate) # create BS.1770 meter
@@ -146,6 +147,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
     list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider_"]
     actions = [
+        actions.test_chunk,
         actions.get_instagram_data, 
         actions.disqualify, 
         actions.qualify, 
@@ -312,6 +314,13 @@ class BusinessContactAdmin(admin.ModelAdmin):
                 html_ddd = f' - <span style="font-size: 14px;">{obj.get_cellphone_ddd()}</span>'
                 html = " | ".join([html1]) + html_ddd
                 help_texts["help_texts"].update({"cellphone": mark_safe(html)})
+                
+            if obj.telephone:
+                href1 = obj.get_whatsapp_link(add_message=False)
+                html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{obj.ftelephone()}</a>'
+                html_ddd = f' - <span style="font-size: 14px;">{obj.get_cellphone_ddd()}</span>'
+                html = " | ".join([html1]) + html_ddd
+                help_texts["help_texts"].update({"telephone": mark_safe(html)})
                 
             if obj.username:
                 href1 = obj.get_instagram_link()
@@ -531,10 +540,10 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
     
 @admin.register(models.BusinessContactKaban)
 class BusinessContactKabanAdmin(BusinessContactAdmin):
+    list_filter = []
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
-    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
+    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.responded, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
     change_list_template = 'admin/businesscontact_kanban_change_list.html'
-    # change_list_results_template = 'admin/businesscontact_kanban_change_list_results.html'
     form = forms.BusinessContactKabanForm
     
     def success_change_message(self, request, obj):
@@ -558,6 +567,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             id = request.POST.get("followed")
             contact = models.BusinessContact.objects.get(id=id)
             contact.followed = True
+            contact.move_date = datetime.now().date()
             contact.save()
             self.success_change_message(request, contact)
             
@@ -566,6 +576,17 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             id = request.POST.get("likes")
             contact = models.BusinessContact.objects.get(id=id)
             contact.likes = contact.likes + 1
+            contact.move_date = datetime.now().date()
+            contact.save()
+            self.success_change_message(request, contact)
+        
+        is_followed_liked = bool(request.POST.get("followed_liked"))
+        if is_followed_liked:
+            id = request.POST.get("followed_liked")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.likes = contact.likes + 1
+            contact.followed = True
+            contact.move_date = datetime.now().date()
             contact.save()
             self.success_change_message(request, contact)
             
@@ -574,6 +595,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             id = request.POST.get("comments")
             contact = models.BusinessContact.objects.get(id=id)
             contact.comments = contact.comments + 1
+            contact.move_date = datetime.now().date()
             contact.save()
             self.success_change_message(request, contact)
             
@@ -582,6 +604,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             id = request.POST.get("contacted")
             contact = models.BusinessContact.objects.get(id=id)
             contact.contacted = True
+            contact.move_date = datetime.now().date()
             contact.save()
             self.success_change_message(request, contact)
             
@@ -591,6 +614,15 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             contact = models.BusinessContact.objects.get(id=id)
             contact.comments = contact.comments + 1
             contact.likes = contact.likes + 1
+            contact.move_date = datetime.now().date()
+            contact.save()
+            self.success_change_message(request, contact)
+            
+        is_responded = bool(request.POST.get("responded"))
+        if is_responded:
+            id = request.POST.get("responded")
+            contact = models.BusinessContact.objects.get(id=id)
+            contact.interaction_responses = contact.interaction_responses + 1
             contact.save()
             self.success_change_message(request, contact)
             
@@ -599,6 +631,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             id = request.POST.get("disqualified")
             contact = models.BusinessContact.objects.get(id=id)
             contact.qualified = False
+            contact.move_date = datetime.now().date()
             contact.save()
             self.success_change_message(request, contact)
             
@@ -615,25 +648,40 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             queryset = cl.queryset
             
             categorized_results = {
-                "qualified": [],
-                "followed": [], 
-                "interacted": [], 
-                "contacted": [],
+                "qualified": {"verbose_name": "qualified", "max_length": 90, "items": [], "next_button": False},
+                "interacted": {"verbose_name": "interacted 1º", "max_length": 15, "items": [], "next_button": False},
+                "interacted2": {"verbose_name": "interacted 2º", "max_length": 15, "items": [], "next_button": False}, 
+                "responded": {"verbose_name": "responded", "max_length": 15, "items": [], "next_button": False},
+                "contacted": {"verbose_name": "contacted", "max_length": None, "items": [], "next_button": False},
             }
             
             for obj in queryset:
-                # categories = [qualified, followed, interacted, contacted]
                 if obj.qualified:
-                    interacted = obj.comments > 0 or obj.likes > 0
-                    if obj.contacted and interacted and obj.followed:
-                        categorized_results["contacted"].append(obj)
-                    elif interacted and obj.followed:
-                        categorized_results["interacted"].append(obj)
-                    elif obj.followed:
-                        categorized_results["followed"].append(obj)
-                    elif obj.followed == False and interacted == False and obj.contacted == False:
-                        categorized_results["qualified"].append(obj)
-
+                    interacted = obj.comments > 0 and obj.likes > 0
+                    interacted2 = obj.comments >= 2 and obj.likes >= 2
+                    
+                    if obj.contacted and interacted:
+                        categorized_results["contacted"]["items"].append(obj)
+                    elif interacted2 and obj.interaction_responses > 0:
+                        categorized_results["responded"]["items"].append(obj)
+                    elif interacted:
+                        if interacted2: 
+                            categorized_results["interacted2"]["items"].append(obj)
+                        else:
+                            categorized_results["interacted"]["items"].append(obj)
+                    elif obj.contacted == False:
+                        categorized_results["qualified"]["items"].append(obj)
+                        
+            for index, category in enumerate(categorized_results):
+                if index + 1 == len(categorized_results): break
+                next_category = list(categorized_results.values())[index+1]
+                
+                if next_category["max_length"] != None:
+                    rest = next_category["max_length"] - len(next_category["items"])
+                    if rest > 0: categorized_results[category]["next_button"] = True
+                else:
+                    categorized_results[category]["next_button"] = True
+                
             response.context_data['categorized_results'] = categorized_results
  
         return response
@@ -725,8 +773,11 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
             return "-"
 
     class Media:
-        js = ('js/admin/instagram_contacts_proxy.js',)    
+        js = ('js/admin/instagram_contacts_change_list_kanban.js',)    
 
+@admin.register(models.InteractionFlow)
+class InteractionFlowAdmin(admin.ModelAdmin):
+    pass
 class BusinessContactInline(admin.StackedInline):
     model = models.BusinessContact
     extra = 0
@@ -966,13 +1017,16 @@ class DeciderAdmin(admin.ModelAdmin):
     
     @admin.display(description='business contact')
     def business_contact_(self, obj: models.Decider):
-        business_contact = models.BusinessContact.objects.filter(decider__id=obj.id)[0]
-        if business_contact:
-            inner_text = business_contact.name
-            href = f"/admin/core/businesscontact/{business_contact.id}/change/"
-            html = f'<a href="{href}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        else:
+        try:    
+            business_contact = models.BusinessContact.objects.filter(decider__id=obj.id)[0]
+            if business_contact:
+                inner_text = business_contact.name
+                href = f"/admin/core/businesscontact/{business_contact.id}/change/"
+                html = f'<a href="{href}" target="_blank">{inner_text}</a>'
+                return mark_safe(html)
+            else:
+                return "-"
+        except Exception as e:
             return "-"
 
 @admin.register(models.Website)

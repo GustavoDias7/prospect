@@ -43,6 +43,7 @@ class Decider(models.Model):
     address = models.CharField(max_length=200, null=True, blank=True)
     color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
     contacted = models.BooleanField(default=False)
+    # observation = models.TextField(max_length=250, null=True, blank=True)
     
     def get_whatsapp_link(self, add_message: bool | None = True):
         phone = remove_non_numeric(self.phone)
@@ -147,6 +148,8 @@ class BusinessContact(models.Model):
     followed = models.BooleanField(default=False)
     likes = models.PositiveSmallIntegerField(default=0)
     comments = models.PositiveSmallIntegerField(default=0)
+    interaction_responses = models.PositiveSmallIntegerField(default=0)
+    move_date = models.DateTimeField(default=None, null=True, blank=True)
     custom_color = models.CharField(max_length=9, null=True, blank=True)
     primary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
     secondary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
@@ -169,7 +172,6 @@ class BusinessContact(models.Model):
             
         return turn
         
-    
     def greeting(self):
         question = random.choice(["tudo bem", "tudo certo", "tudo certo por ai"])
         hello = random.choice(["oi", "olá"]).capitalize()
@@ -193,12 +195,11 @@ class BusinessContact(models.Model):
         else:
             message = f"{hello}, {question}?"
             
-    
     def get_instagram_link(self):
         return f"https://www.instagram.com/{self.username}"
     
     def get_whatsapp_link(self, add_message: bool | None = True):
-        cellphone = remove_non_numeric(self.cellphone)
+        phone = remove_non_numeric(self.cellphone or self.telephone)
         
         if add_message:
             message = "Olá, tudo bem?"
@@ -215,9 +216,9 @@ class BusinessContact(models.Model):
             elif night:
                 message = "Olá, boa noite!"
             
-            return f"https://web.whatsapp.com/send/?phone={cellphone}&text={message}"
+            return f"https://web.whatsapp.com/send/?phone={phone}&text={message}"
         else:
-            return f"https://web.whatsapp.com/send/?phone={cellphone}"
+            return f"https://web.whatsapp.com/send/?phone={phone}"
     
     def fcellphone(self):
         if self.cellphone:
@@ -247,13 +248,14 @@ class BusinessContact(models.Model):
         
     def get_cellphone_ddd(self) -> str | None:
         ddd = None
+        phone = self.cellphone or self.telephone
         
         try:
-            if self.cellphone:
-                if len(self.cellphone) in (13, 12):
-                    ddd = DDD[self.cellphone[2:4]]
-                elif len(self.cellphone) in (11, 10):
-                    ddd = DDD[self.cellphone[0:2]]
+            if phone:
+                if len(phone) in (13, 12):
+                    ddd = DDD[phone[2:4]]
+                elif len(phone) in (11, 10):
+                    ddd = DDD[phone[0:2]]
         except Exception as e:
             print("DDD not found!")
             
@@ -273,10 +275,46 @@ class BusinessContact(models.Model):
             
         return message
     
+    def is_tomorrow_or_later(self) -> bool:
+        if self.move_date == None:
+            return True
+        else:
+            return datetime.datetime.now().date() > self.move_date.date()
+    
     def __str__(self):
         if self.username: return self.username
         else: return f"Instagram {self.id}"
-         
+
+class InteractionFlow(models.Model):
+    qualified = models.ManyToManyField(BusinessContact, related_name="qualified_contacts", blank=True)
+    followed = models.ManyToManyField(BusinessContact, related_name="followed_contacts", blank=True)
+    interacted = models.ManyToManyField(BusinessContact, related_name="interacted_contacts", blank=True)
+    responded = models.ManyToManyField(BusinessContact, related_name="responded_contacts", blank=True)
+    contacted = models.ManyToManyField(BusinessContact, related_name="contacted_contacts", blank=True)
+    
+    max_qualified = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
+    max_followed = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
+    max_interacted = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
+    max_responded = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
+    max_contacted = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
+    
+    # def move_to_next(self, contact_id: int, category_name: str):
+    #     category = self[category_name]
+    #     next_category = "next_category"
+    #     if next_category != None: # current contact is not into last category
+    #         max_length_next_category = 1 # f"max_{category_name}"
+    #         contact = category.objects.get(id=contact_id)
+    #         never_moved = contact.move_date == None
+    #         yesterday = "date"
+    #         moved_yesterday = contact.move_date == yesterday
+    #         if (never_moved or moved_yesterday) \
+    #             and contact.moved_today == False \
+    #             and len(next_category) < max_length_next_category: # have space
+    #                 # change contact to the next category
+    #                 pass
+    #     else:
+    #         print("The current contact is into last category.")
+        
 class BusinessContactProxy(BusinessContact):
     class Meta:
         proxy = True
