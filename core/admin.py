@@ -1021,6 +1021,11 @@ class StaffMemberAdmin(admin.ModelAdmin):
 class StaffMemberTypeAdmin(admin.ModelAdmin):
     pass
 
+
+@admin.register(models.Interaction)
+class InteractionAdmin(admin.ModelAdmin):
+    form = forms.InteractionForm
+
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
     list_filter = ["qualified"]

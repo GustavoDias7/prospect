@@ -24,6 +24,13 @@ class BusinessKanbanForm(forms.ModelForm):
         
     class Media:
         js = ('js/admin/instagram_contacts_kanban.js',)
+class InteractionForm(forms.ModelForm):
+    class Meta:
+        model = models.Interaction
+        fields = "__all__"
+        
+    class Media:
+        js = ('js/admin/interaction.js',)
         
 class TemplateForm(forms.ModelForm):
     class Meta:

@@ -89,6 +89,23 @@ DDD = {
     "99": "MA"
 }
 
+INTERACTION_CONTACTS = {
+    "whatsapp_call": "WhatsApp call",
+    "phone_call": "Phone call",
+    "instagram_dm": "Instagram DM",
+    "whatsapp_message": "WhatsApp message",
+    "facebook_message": "Facebook message",
+    "email": "E-mail",
+}
+
+INTERACTION_STATUS = {
+    None: "Not contacted",
+    "contacted": "contacted",
+    "no_replay": "No replay",
+    "followed_up": "Follow up",
+    "finish": "Finish"
+}
+
 COLORS = {
     "#f8fafc": "slate-color-50",
     "#f1f5f9": "slate-color-100",

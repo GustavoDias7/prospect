@@ -2,7 +2,7 @@ from django.db import models
 from prospect.utils import remove_non_numeric, has_string_in_list
 import datetime
 from pytz import timezone
-from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD, COLORS
+from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD, COLORS, INTERACTION_CONTACTS, INTERACTION_STATUS
 import random
 from django.urls import reverse
 
@@ -142,13 +142,13 @@ class Business(models.Model):
     email = models.EmailField(null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
     qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
-    # decider = models.OneToOneField(to="Decider", on_delete=models.SET_NULL, null=True, blank=True)
     staff_members = models.ManyToManyField(to=StaffMember, blank=True, related_name="staff_member")
     contacted = models.BooleanField(default=False)
     last_post = models.DateTimeField(default=None, null=True, blank=True)
     archived = models.BooleanField(default=False)
     menu = models.BooleanField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
+    interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL)
     followed = models.BooleanField(default=False)
     likes = models.PositiveSmallIntegerField(default=0)
     comments = models.PositiveSmallIntegerField(default=0)
@@ -301,6 +301,13 @@ class BusinessKanban(Business):
         proxy = True
         verbose_name = "Business Kanban"
         verbose_name_plural = "Business Kanban"
+
+class Interaction(models.Model):
+    status = models.CharField(max_length=30, choices=INTERACTION_STATUS, null=True, blank=True)
+    contact_via = models.CharField(max_length=30, choices=INTERACTION_CONTACTS, null=True, blank=True)
+    date = models.DateTimeField(auto_now_add=True, null=True, blank=True) #first interaction
+    follow_up_date = models.DateTimeField(default=None, null=True, blank=True)
+    observation = models.TextField(max_length=400, null=True, blank=True)
         
 class Website(models.Model):
     website = models.CharField(max_length=200, unique=True, null=True, blank=True)
