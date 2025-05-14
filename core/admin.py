@@ -775,9 +775,6 @@ class BusinessKanbanAdmin(BusinessContactAdmin):
     class Media:
         js = ('js/admin/instagram_contacts_change_list_kanban.js',)    
 
-@admin.register(models.InteractionFlow)
-class InteractionFlowAdmin(admin.ModelAdmin):
-    pass
 class BusinessContactInline(admin.StackedInline):
     model = models.Business
     extra = 0

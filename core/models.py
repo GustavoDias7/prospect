@@ -289,19 +289,7 @@ class Business(models.Model):
         verbose_name = "Business"
         verbose_name_plural = "Business"
 
-class InteractionFlow(models.Model):
-    qualified = models.ManyToManyField(Business, related_name="qualified_contacts", blank=True)
-    followed = models.ManyToManyField(Business, related_name="followed_contacts", blank=True)
-    interacted = models.ManyToManyField(Business, related_name="interacted_contacts", blank=True)
-    responded = models.ManyToManyField(Business, related_name="responded_contacts", blank=True)
-    contacted = models.ManyToManyField(Business, related_name="contacted_contacts", blank=True)
-    
-    max_qualified = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
-    max_followed = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
-    max_interacted = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
-    max_responded = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
-    max_contacted = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
-    
+ 
 class BusinessKanban(Business):
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
