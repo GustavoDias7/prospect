@@ -142,7 +142,7 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         else:
             return "-"
 
-@admin.register(models.BusinessContact)
+@admin.register(models.Business)
 class BusinessContactAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
     list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_", "decider_"]
@@ -165,7 +165,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
     change_form_template = 'admin/businesscontact_change_form.html'
     form = forms.BusinessContactForm
     
-    def response_change(self, request, obj: models.BusinessContact):
+    def response_change(self, request, obj: models.Business):
         is_image = bool(request.POST.get("generate_image"))
         print(is_image)
         
@@ -277,7 +277,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         
         try:
-            business_contact = models.BusinessContact.objects.get(id=object_id)
+            business_contact = models.Business.objects.get(id=object_id)
             extra_context["business_contact"] = business_contact
             if business_contact.template:
                 template = Template(boldify(business_contact.template.message, True))
@@ -296,7 +296,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
             extra_context=extra_context,
         )
     
-    def get_form(self, request, obj:models.BusinessContact = None, **kwargs):
+    def get_form(self, request, obj:models.Business = None, **kwargs):
         help_texts = { "help_texts": {} }
         if obj:
             if obj.name:
@@ -402,7 +402,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
             return None
 
     @admin.display(description='decider')
-    def decider_(self, obj: models.BusinessContact):
+    def decider_(self, obj: models.Business):
         if obj.decider:
             inner_text = obj.decider.name
             href = f"/admin/core/decider/{obj.decider.id}/change/"
@@ -411,7 +411,7 @@ class BusinessContactAdmin(admin.ModelAdmin):
         else:
             return "-"
 
-@admin.register(models.BusinessContactProxy)
+# @admin.register(models.BusinessContactProxy)
 class BusinessContactProxyAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived", "followed"]
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
@@ -429,21 +429,21 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
         is_likes = bool(request.POST.get("followed"))
         if is_likes:
             id = request.POST.get("followed")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.followed = True
             contact.save()
             
         is_likes = bool(request.POST.get("likes"))
         if is_likes:
             id = request.POST.get("likes")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.likes = contact.likes + 1
             contact.save()
             
         is_comments = bool(request.POST.get("comments"))
         if is_comments:
             id = request.POST.get("comments")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.comments = contact.comments + 1
             contact.save()
             
@@ -538,13 +538,13 @@ class BusinessContactProxyAdmin(admin.ModelAdmin):
     class Media:
         js = ('js/admin/instagram_contacts_proxy.js',)    
     
-@admin.register(models.BusinessContactKaban)
-class BusinessContactKabanAdmin(BusinessContactAdmin):
+@admin.register(models.BusinessKanban)
+class BusinessKanbanAdmin(BusinessContactAdmin):
     list_filter = []
     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
     actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.responded, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
     change_list_template = 'admin/businesscontact_kanban_change_list.html'
-    form = forms.BusinessContactKabanForm
+    form = forms.BusinessKanbanForm
     
     def success_change_message(self, request, obj):
         model_meta = obj._meta
@@ -565,7 +565,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_followed = bool(request.POST.get("followed"))
         if is_followed:
             id = request.POST.get("followed")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.followed = True
             contact.move_date = datetime.now().date()
             contact.save()
@@ -574,7 +574,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_likes = bool(request.POST.get("likes"))
         if is_likes:
             id = request.POST.get("likes")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.likes = contact.likes + 1
             contact.move_date = datetime.now().date()
             contact.save()
@@ -583,7 +583,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_followed_liked = bool(request.POST.get("followed_liked"))
         if is_followed_liked:
             id = request.POST.get("followed_liked")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.likes = contact.likes + 1
             contact.followed = True
             contact.move_date = datetime.now().date()
@@ -593,7 +593,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_comments = bool(request.POST.get("comments"))
         if is_comments:
             id = request.POST.get("comments")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.comments = contact.comments + 1
             contact.move_date = datetime.now().date()
             contact.save()
@@ -602,7 +602,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_contacted = bool(request.POST.get("contacted"))
         if is_contacted:
             id = request.POST.get("contacted")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.contacted = True
             contact.move_date = datetime.now().date()
             contact.save()
@@ -611,7 +611,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_comment_like = bool(request.POST.get("comment_like"))
         if is_comment_like:
             id = request.POST.get("comment_like")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.comments = contact.comments + 1
             contact.likes = contact.likes + 1
             contact.move_date = datetime.now().date()
@@ -621,7 +621,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_responded = bool(request.POST.get("responded"))
         if is_responded:
             id = request.POST.get("responded")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.interaction_responses = contact.interaction_responses + 1
             contact.save()
             self.success_change_message(request, contact)
@@ -629,7 +629,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_disqualified = bool(request.POST.get("disqualified"))
         if is_disqualified:
             id = request.POST.get("disqualified")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.qualified = False
             contact.move_date = datetime.now().date()
             contact.save()
@@ -638,7 +638,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
         is_archived = bool(request.POST.get("archived"))
         if is_archived:
             id = request.POST.get("archived")
-            contact = models.BusinessContact.objects.get(id=id)
+            contact = models.Business.objects.get(id=id)
             contact.archived = True
             contact.save()
             self.success_change_message(request, contact)
@@ -779,7 +779,7 @@ class BusinessContactKabanAdmin(BusinessContactAdmin):
 class InteractionFlowAdmin(admin.ModelAdmin):
     pass
 class BusinessContactInline(admin.StackedInline):
-    model = models.BusinessContact
+    model = models.Business
     extra = 0
     
     def get_formset(self, request, obj=None, **kwargs):
@@ -842,12 +842,12 @@ class QualifiedListFilter(admin.SimpleListFilter):
 
     def queryset(self, request, queryset):
         if self.value() == "yes" or self.value() == "no":
-            business_contact = models.BusinessContact.objects.filter(
+            business_contact = models.Business.objects.filter(
                 qualified=self.value() == "yes"
             ).values_list("decider__id", flat=True)
             return queryset.filter(id__in=business_contact)
         elif self.value() == "none":
-            business_contact = models.BusinessContact.objects.filter(
+            business_contact = models.Business.objects.filter(
                 qualified=None
             ).values_list("decider__id", flat=True)
             return queryset.filter(id__in=business_contact)
@@ -916,7 +916,7 @@ class DeciderAdmin(admin.ModelAdmin):
     
     def response_change(self, request, obj: models.Decider):
         is_image = bool(request.POST.get("generate_image"))
-        business_contact = models.BusinessContact.objects.filter(decider__id=obj.id)[0]
+        business_contact = models.Business.objects.filter(decider__id=obj.id)[0]
         
         if is_image and obj:
             dimentions = get_dimentions("9:16", 1280, int)
@@ -966,7 +966,7 @@ class DeciderAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         
         try:
-            business_contact = models.BusinessContact.objects.get(decider__id=object_id)
+            business_contact = models.Business.objects.get(decider__id=object_id)
             extra_context["business_contact"] = business_contact
             if business_contact.template:
                 template = Template(business_contact.template.message)
@@ -1015,13 +1015,13 @@ class DeciderAdmin(admin.ModelAdmin):
         else:
             return "-"
     
-    @admin.display(description='business contact')
+    @admin.display(description='Business contact')
     def business_contact_(self, obj: models.Decider):
         try:    
-            business_contact = models.BusinessContact.objects.filter(decider__id=obj.id)[0]
+            business_contact = models.Business.objects.filter(decider__id=obj.id)[0]
             if business_contact:
                 inner_text = business_contact.name
-                href = f"/admin/core/businesscontact/{business_contact.id}/change/"
+                href = f"/admin/core/Business/{business_contact.id}/change/"
                 html = f'<a href="{href}" target="_blank">{inner_text}</a>'
                 return mark_safe(html)
             else:
@@ -1163,7 +1163,7 @@ class TemplateAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         
         try:
-            business_contact = models.BusinessContact.objects.get(id=3756)
+            business_contact = models.Business.objects.get(id=3756)
             template = models.Template.objects.get(id=object_id)
             extra_context["business_contact"] = business_contact
             if template:

@@ -128,7 +128,7 @@ class Decider(models.Model):
 # class SeleniumDriver(models.Model):
 #     name = models.CharField(max_length=50, null=True, blank=True)
 
-class BusinessContact(models.Model):
+class Business(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     cnpj = models.CharField(max_length=18, null=True, blank=True)
     username = models.CharField(max_length=30, unique=True, null=True, blank=True)
@@ -284,13 +284,17 @@ class BusinessContact(models.Model):
     def __str__(self):
         if self.username: return self.username
         else: return f"Instagram {self.id}"
+    
+    class Meta:
+        verbose_name = "Business"
+        verbose_name_plural = "Business"
 
 class InteractionFlow(models.Model):
-    qualified = models.ManyToManyField(BusinessContact, related_name="qualified_contacts", blank=True)
-    followed = models.ManyToManyField(BusinessContact, related_name="followed_contacts", blank=True)
-    interacted = models.ManyToManyField(BusinessContact, related_name="interacted_contacts", blank=True)
-    responded = models.ManyToManyField(BusinessContact, related_name="responded_contacts", blank=True)
-    contacted = models.ManyToManyField(BusinessContact, related_name="contacted_contacts", blank=True)
+    qualified = models.ManyToManyField(Business, related_name="qualified_contacts", blank=True)
+    followed = models.ManyToManyField(Business, related_name="followed_contacts", blank=True)
+    interacted = models.ManyToManyField(Business, related_name="interacted_contacts", blank=True)
+    responded = models.ManyToManyField(Business, related_name="responded_contacts", blank=True)
+    contacted = models.ManyToManyField(Business, related_name="contacted_contacts", blank=True)
     
     max_qualified = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
     max_followed = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
@@ -298,34 +302,13 @@ class InteractionFlow(models.Model):
     max_responded = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
     max_contacted = models.PositiveSmallIntegerField(default=None, null=True, blank=True)
     
-    # def move_to_next(self, contact_id: int, category_name: str):
-    #     category = self[category_name]
-    #     next_category = "next_category"
-    #     if next_category != None: # current contact is not into last category
-    #         max_length_next_category = 1 # f"max_{category_name}"
-    #         contact = category.objects.get(id=contact_id)
-    #         never_moved = contact.move_date == None
-    #         yesterday = "date"
-    #         moved_yesterday = contact.move_date == yesterday
-    #         if (never_moved or moved_yesterday) \
-    #             and contact.moved_today == False \
-    #             and len(next_category) < max_length_next_category: # have space
-    #                 # change contact to the next category
-    #                 pass
-    #     else:
-    #         print("The current contact is into last category.")
-        
-class BusinessContactProxy(BusinessContact):
-    class Meta:
-        proxy = True
-        verbose_name = "Business Contact Interactions"
-        
-class BusinessContactKaban(BusinessContact):
+class BusinessKanban(Business):
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
     class Meta:
         proxy = True
-        verbose_name = "Business Contact Kaban"
+        verbose_name = "Business Kanban"
+        verbose_name_plural = "Business Kanban"
         
 class Website(models.Model):
     website = models.CharField(max_length=200, unique=True, null=True, blank=True)

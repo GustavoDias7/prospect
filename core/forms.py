@@ -3,7 +3,7 @@ from . import models
 
 class BusinessContactForm(forms.ModelForm):
     class Meta:
-        model = models.BusinessContact
+        model = models.Business
         fields = "__all__"
         
     class Media:
@@ -11,15 +11,15 @@ class BusinessContactForm(forms.ModelForm):
         
 class BusinessContactProxyForm(forms.ModelForm):
     class Meta:
-        model = models.BusinessContactProxy
+        # model = models.BusinessContactProxy
         fields = "__all__"
         
     # class Media:
     #     js = ('js/admin/instagram_contacts_proxy.js',)
     
-class BusinessContactKabanForm(forms.ModelForm):
+class BusinessKanbanForm(forms.ModelForm):
     class Meta:
-        model = models.BusinessContactKaban
+        model = models.BusinessKanban
         fields = "__all__"
         
     class Media:

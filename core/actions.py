@@ -1256,20 +1256,20 @@ def unfollow(modeladmin, request, queryset):
 
 
 @admin.action(description="Comment and like post", permissions=["change"])
-def comment_and_like(modeladmin, request, queryset: QuerySet[models.BusinessContact]):
+def comment_and_like(modeladmin, request, queryset: QuerySet[models.Business]):
     for index, query in enumerate(queryset):
         query.comments = query.comments + 1
         query.likes = query.likes + 1
         query.save()
         
 @admin.action(description="Responded", permissions=["change"])
-def responded(modeladmin, request, queryset: QuerySet[models.BusinessContact]):
+def responded(modeladmin, request, queryset: QuerySet[models.Business]):
     for index, query in enumerate(queryset):
         query.interaction_responses = query.interaction_responses + 1
         query.save()
  
 @admin.action(description="Like post", permissions=["change"])
-def like_post(modeladmin, request, queryset: QuerySet[models.BusinessContact]):
+def like_post(modeladmin, request, queryset: QuerySet[models.Business]):
     for index, query in enumerate(queryset):
         query.likes = query.likes + 1
         query.save()
@@ -1420,7 +1420,7 @@ def check_search_engine(modeladmin, request, queryset):
 
 
 @admin.action(description="Help post comments", permissions=["change"])
-def help_comments(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.BusinessContact]):
+def help_comments(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
     options = Options()
     # options.add_argument("--headless")
     driver = webdriver.Firefox(options=options)

@@ -3,7 +3,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import time
-from core.models import BusinessContact
+from core.models import Business
 from django.core.management.base import BaseCommand
 import urllib.parse
 from selenium.webdriver.support.ui import Select
@@ -50,13 +50,13 @@ class Command(BaseCommand):
             contacts = []
             for link in links:
                 href = urllib.parse.urlparse(link.get_attribute("href"))
-                contact = BusinessContact()
+                contact = Business()
                 username = href.path.split("/")[1]
                 if username in ("reel", "tv", "c", "p", "stories"): continue
                 contact.username = username
                 contacts.append(contact)
                 
-            BusinessContact.objects.bulk_create(contacts, ignore_conflicts=True)
+            Business.objects.bulk_create(contacts, ignore_conflicts=True)
                 
             next_form = driver.find_element(By.CLASS_NAME, "next_form")
             next_form.submit()
