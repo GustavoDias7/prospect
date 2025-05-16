@@ -305,7 +305,7 @@ class Interaction(models.Model):
     
     def __str__(self):
         if self.status:
-            return self.status.name
+            return f"[{self.id}] {self.status.name}"
         else:
             return str(self.id)
         

@@ -167,7 +167,7 @@ class BusinessAdmin(admin.ModelAdmin):
         actions.check_search_engine
     ]
     search_fields = ["id", "instagram_username", "website", "cellphone"]
-    autocomplete_fields = ["template"]
+    autocomplete_fields = ["template", "interaction"]
     change_form_template = 'admin/businesscontact_change_form.html'
     change_list_template = 'admin/businesscontact_change_list.html'
     filter_horizontal = ('staff_members',)
@@ -724,7 +724,7 @@ class StaffMemberTypeAdmin(admin.ModelAdmin):
 @admin.register(models.Interaction)
 class InteractionAdmin(admin.ModelAdmin):
     form = forms.InteractionForm
-    
+    search_fields = ["name"]
 @admin.register(models.InteractionStatus)
 class InteractionStatusAdmin(admin.ModelAdmin):
     pass
