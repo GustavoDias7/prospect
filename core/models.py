@@ -125,10 +125,14 @@ class StaffMember(models.Model):
             
     def __str__(self):
         if self.name: return self.name
-        else: return f"Decider {self.id}"
+        else: return f"Staff Member {self.id}"
         
 class StaffMemberType(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
+    
+    def __str__(self):
+        if self.name: return self.name
+        else: return f"Staff member type {self.id}"
     
 class Business(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
@@ -146,21 +150,11 @@ class Business(models.Model):
     contacted = models.BooleanField(default=False)
     last_post = models.DateTimeField(default=None, null=True, blank=True)
     archived = models.BooleanField(default=False)
-    menu = models.BooleanField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
     interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL)
-    followed = models.BooleanField(default=False)
-    likes = models.PositiveSmallIntegerField(default=0)
-    comments = models.PositiveSmallIntegerField(default=0)
-    interaction_responses = models.PositiveSmallIntegerField(default=0)
-    move_date = models.DateTimeField(default=None, null=True, blank=True)
-    custom_color = models.CharField(max_length=9, null=True, blank=True)
-    primary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
-    secondary_color = models.CharField(choices=COLORS, max_length=9, null=True, blank=True)
-    image1 = models.ImageField(null=True, blank=True)
-    image2 = models.ImageField(null=True, blank=True)
-    image3 = models.ImageField(null=True, blank=True)
-    image4 = models.ImageField(null=True, blank=True)
+    
+    def get_admin_change_url(self):
+        return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
     
     def greeting_turn(self) -> str:
         now = datetime.datetime.now(timezone('America/Sao_Paulo'))
@@ -303,12 +297,30 @@ class BusinessKanban(Business):
         verbose_name_plural = "Business Kanban"
 
 class Interaction(models.Model):
-    status = models.CharField(max_length=30, choices=INTERACTION_STATUS, null=True, blank=True)
-    contact_via = models.CharField(max_length=30, choices=INTERACTION_CONTACTS, null=True, blank=True)
+    status = models.ForeignKey("InteractionStatus", on_delete=models.SET_NULL, null=True, blank=True)
+    contact_via = models.ForeignKey("InteractionContactVia", on_delete=models.SET_NULL, null=True, blank=True)
     date = models.DateTimeField(auto_now_add=True, null=True, blank=True) #first interaction
     follow_up_date = models.DateTimeField(default=None, null=True, blank=True)
     observation = models.TextField(max_length=400, null=True, blank=True)
+    
+    def __str__(self):
+        if self.status:
+            return self.status.name
+        else:
+            return str(self.id)
         
+class InteractionStatus(models.Model):
+    name = models.CharField(max_length=30)
+    
+    def __str__(self):
+        return self.name
+    
+class InteractionContactVia(models.Model):
+    name = models.CharField(max_length=30)
+    
+    def __str__(self):
+        return self.name
+    
 class Website(models.Model):
     website = models.CharField(max_length=200, unique=True, null=True, blank=True)
     qualified = models.BooleanField(default=None, null=True, blank=True)

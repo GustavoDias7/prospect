@@ -26,6 +26,7 @@ from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 from django.utils.html import format_html
 from datetime import datetime
+from django.utils import timezone
 
 # data, rate = sf.read("test.wav") # load audio (with shape (samples, channels))
 # meter = pyln.Meter(rate) # create BS.1770 meter
@@ -142,9 +143,14 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         else:
             return "-"
 
+# class Kanban():
+    
+    
+        
+    
 @admin.register(models.Business)
 class BusinessAdmin(admin.ModelAdmin):
-    list_filter = ["qualified", "contacted", "archived", "followed"]
+    list_filter = ["qualified", "contacted", "archived"]
     list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_"]
     actions = [
         actions.test_chunk,
@@ -163,8 +169,67 @@ class BusinessAdmin(admin.ModelAdmin):
     search_fields = ["id", "instagram_username", "website", "cellphone"]
     autocomplete_fields = ["template"]
     change_form_template = 'admin/businesscontact_change_form.html'
+    change_list_template = 'admin/businesscontact_change_list.html'
     filter_horizontal = ('staff_members',)
     form = forms.BusinessContactForm
+    kanban_layout = False
+    kanban_columns = {
+        "qualified": {"verbose_name": "qualified", "max_length": None, "filter": "qualified_filter"},
+        "follow_up": {"verbose_name": "follow up", "max_length": None, "filter": "follow_up_filter"},
+        "no_reply": {"verbose_name": "no reply", "max_length": None, "filter": "no_reply_filter"},
+        "maybe_in_the_future": {"verbose_name": "maybe in the future", "max_length": None, "filter": "maybe_in_the_future_filter"},
+        "meeting": {"verbose_name": "meeting", "max_length": None, "filter": "meeting_filter"},
+        "finish": {"verbose_name": "finish", "max_length": None, "filter": "finish_filter"},
+    }
+    
+    def qualified_filter(self, response):
+        qs = response.context_data['cl'].queryset
+        qs = qs.filter(qualified=True, archived=False, contacted=False, interaction__isnull=True)
+        return qs
+    
+    def follow_up_filter(self, response):
+        qs = response.context_data['cl'].queryset
+        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Follow up")
+        qs = qs.order_by('interaction__follow_up_date')
+        return qs
+    
+    def no_reply_filter(self, response):
+        qs = response.context_data['cl'].queryset
+        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="No reply")
+        qs = qs.order_by('interaction__follow_up_date')
+        return qs
+    
+    def maybe_in_the_future_filter(self, response):
+        qs = response.context_data['cl'].queryset
+        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Maybe in the future")
+        qs = qs.order_by('interaction__follow_up_date')
+        return qs
+    
+    def meeting_filter(self, response):
+        qs = response.context_data['cl'].queryset
+        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Meeting")
+        return qs
+    
+    def finish_filter(self, response):
+        qs = response.context_data['cl'].queryset
+        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Finish")
+        return qs
+    
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+        response.context_data['kanban_layout'] = self.kanban_layout
+        response.context_data['kanban_columns'] = self.kanban_columns
+        for category, objects in self.kanban_columns.items():
+            filter_name = objects.get("filter")
+            filter = getattr(self, filter_name)
+            objects["items"] = filter(response)
+        return response 
+    
+    def get_list_filter(self, request):
+        if self.kanban_layout:
+            return ()
+        else:
+            return self.list_filter
     
     def response_change(self, request, obj: models.Business):
         is_image = bool(request.POST.get("generate_image"))
@@ -290,6 +355,7 @@ class BusinessAdmin(admin.ModelAdmin):
         except ObjectDoesNotExist:
             extra_context["template"] = None
         
+        
         return super().change_view(
             request,
             object_id,
@@ -402,379 +468,12 @@ class BusinessAdmin(admin.ModelAdmin):
         else:
             return None
 
-    # @admin.display(description='decider')
-    # def decider_(self, obj: models.Business):
-    #     if obj.decider:
-    #         inner_text = obj.decider.name
-    #         href = f"/admin/core/decider/{obj.decider.id}/change/"
-    #         html = f'<a href="{href}" target="_blank">{inner_text}</a>'
-    #         return mark_safe(html)
-    #     else:
-    #         return "-"
-
-# @admin.register(models.BusinessContactProxy)
-# class BusinessContactProxyAdmin(admin.ModelAdmin):
-#     list_filter = ["qualified", "contacted", "archived", "followed"]
-#     search_fields = ["id", "username", "website", "cellphone", "decider__name"]
-#     list_display = ["id", "instagram", "cellphone_"]
-#     actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.contacted, actions.not_contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
-#     change_list_template = 'admin/businesscontact_proxy_change_form.html'
-#     form = forms.BusinessContactProxyForm
-    
-#     def get_queryset(self, request):
-#         qs = super().get_queryset(request)
-#         qs = qs.filter(name__isnull=False)
-#         return qs
-    
-#     def changelist_view(self, request, extra_context=None):
-#         is_likes = bool(request.POST.get("followed"))
-#         if is_likes:
-#             id = request.POST.get("followed")
-#             contact = models.Business.objects.get(id=id)
-#             contact.followed = True
-#             contact.save()
-            
-#         is_likes = bool(request.POST.get("likes"))
-#         if is_likes:
-#             id = request.POST.get("likes")
-#             contact = models.Business.objects.get(id=id)
-#             contact.likes = contact.likes + 1
-#             contact.save()
-            
-#         is_comments = bool(request.POST.get("comments"))
-#         if is_comments:
-#             id = request.POST.get("comments")
-#             contact = models.Business.objects.get(id=id)
-#             contact.comments = contact.comments + 1
-#             contact.save()
-            
-#         return super().changelist_view(request, extra_context) 
-    
-#     def get_list_display(self, request):
-#         list_display = list(super().get_list_display(request))
-        
-#         def follow_contact(self):
-#             csrf_token = get_token(request)
-#             button_html = f'<input type="submit" value="Follow" style="padding: 8px 12px;" />'
-#             csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-#             field = f'<input type="hidden" name="followed" value="{self.id}" />'
-#             form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-#             html = form_html
-#             return mark_safe(html)
-
-#         list_display.append("followed")
-#         list_display.append(follow_contact)
-        
-#         def one_more_like(self):
-#             csrf_token = get_token(request)
-#             button_html = f'<input type="submit" value="+1 like" style="padding: 8px 12px;" />'
-#             csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-#             field = f'<input type="hidden" name="likes" value="{self.id}" />'
-#             form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-#             html = form_html
-#             return mark_safe(html)
-
-#         list_display.append("likes")
-#         list_display.append(one_more_like)
-        
-#         def one_more_comment(self):
-#             csrf_token = get_token(request)
-#             button_html = f'<input type="submit" value="+1 comment" style="padding: 8px 12px;" />'
-#             csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-#             field = f'<input type="hidden" name="comments" value="{self.id}" />'
-#             form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-#             html = form_html
-#             return mark_safe(html)
-
-#         list_display.append("comments")
-#         list_display.append(one_more_comment)
-        
-#         list_display.append("last_post_")
-
-#         return list_display
-       
-#     @admin.display(description='cellphone')
-#     def cellphone_(self, obj):
-#         if obj.cellphone:
-#             if len(obj.cellphone) == 13: 
-#                 link_number = obj.get_whatsapp_link(add_message=False)
-#                 inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
-#                 whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-#                 return mark_safe(whatsapp)
-#             if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
-#                 link_number = obj.get_whatsapp_link(add_message=False)
-#                 inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
-#                 whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-#                 return mark_safe(whatsapp)
-#             elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
-#                 link_number = obj.get_whatsapp_link(add_message=False)
-#                 inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
-#                 whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-#                 return mark_safe(whatsapp)
-#             else: 
-#                 return obj.cellphone
-#         else:
-#             return None
-    
-#     @admin.display(description='instagram')
-#     def instagram(self, obj):
-#         if obj.name:
-#             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
-#             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
-#             return mark_safe(html)
-#         elif obj.username:
-#             inner_text = obj.username
-#             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
-#             return mark_safe(html)
-#         else:
-#             return "-"
- 
-#     @admin.display(description='last post')
-#     def last_post_(self, obj):
-#         if obj.last_post:
-#             return obj.last_post.strftime("%b. %d, %Y")
-#         else:
-#             return "-"
-
-#     class Media:
-#         js = ('js/admin/instagram_contacts_proxy.js',)    
     
 @admin.register(models.BusinessKanban)
 class BusinessKanbanAdmin(BusinessAdmin):
     list_filter = []
-    search_fields = ["id", "instagram_username", "website", "cellphone"]
-    actions = [actions.follow, actions.unfollow, actions.archive, actions.comment_and_like, actions.responded, actions.contacted, actions.help_comments, actions.qualify, actions.disqualify, actions.like_post]
-    change_list_template = 'admin/businesscontact_kanban_change_list.html'
-    form = forms.BusinessKanbanForm
+    kanban_layout = True
     
-    def success_change_message(self, request, obj):
-        model_meta = obj._meta
-        url = reverse(f'admin:{model_meta.app_label}_{model_meta.model_name}_change', args=[obj.pk])
-        link = format_html('<a href="{}">{}</a>', url, obj)
-        model_name = model_meta.verbose_name
-        message = format_html( _('The {} "{}" was changed successfully.'), model_name, link)
-        messages.success(request, message)
-    
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        qs = qs.filter(name__isnull=False, archived=False, qualified=True)
-        return qs
-    
-    def changelist_view(self, request, extra_context=None):
-        response = super().changelist_view(request, extra_context=extra_context)
-        
-        is_followed = bool(request.POST.get("followed"))
-        if is_followed:
-            id = request.POST.get("followed")
-            contact = models.Business.objects.get(id=id)
-            contact.followed = True
-            contact.move_date = datetime.now().date()
-            contact.save()
-            self.success_change_message(request, contact)
-            
-        is_likes = bool(request.POST.get("likes"))
-        if is_likes:
-            id = request.POST.get("likes")
-            contact = models.Business.objects.get(id=id)
-            contact.likes = contact.likes + 1
-            contact.move_date = datetime.now().date()
-            contact.save()
-            self.success_change_message(request, contact)
-        
-        is_followed_liked = bool(request.POST.get("followed_liked"))
-        if is_followed_liked:
-            id = request.POST.get("followed_liked")
-            contact = models.Business.objects.get(id=id)
-            contact.likes = contact.likes + 1
-            contact.followed = True
-            contact.move_date = datetime.now().date()
-            contact.save()
-            self.success_change_message(request, contact)
-            
-        is_comments = bool(request.POST.get("comments"))
-        if is_comments:
-            id = request.POST.get("comments")
-            contact = models.Business.objects.get(id=id)
-            contact.comments = contact.comments + 1
-            contact.move_date = datetime.now().date()
-            contact.save()
-            self.success_change_message(request, contact)
-            
-        is_contacted = bool(request.POST.get("contacted"))
-        if is_contacted:
-            id = request.POST.get("contacted")
-            contact = models.Business.objects.get(id=id)
-            contact.contacted = True
-            contact.move_date = datetime.now().date()
-            contact.save()
-            self.success_change_message(request, contact)
-            
-        is_comment_like = bool(request.POST.get("comment_like"))
-        if is_comment_like:
-            id = request.POST.get("comment_like")
-            contact = models.Business.objects.get(id=id)
-            contact.comments = contact.comments + 1
-            contact.likes = contact.likes + 1
-            contact.move_date = datetime.now().date()
-            contact.save()
-            self.success_change_message(request, contact)
-            
-        is_responded = bool(request.POST.get("responded"))
-        if is_responded:
-            id = request.POST.get("responded")
-            contact = models.Business.objects.get(id=id)
-            contact.interaction_responses = contact.interaction_responses + 1
-            contact.save()
-            self.success_change_message(request, contact)
-            
-        is_disqualified = bool(request.POST.get("disqualified"))
-        if is_disqualified:
-            id = request.POST.get("disqualified")
-            contact = models.Business.objects.get(id=id)
-            contact.qualified = False
-            contact.move_date = datetime.now().date()
-            contact.save()
-            self.success_change_message(request, contact)
-            
-        is_archived = bool(request.POST.get("archived"))
-        if is_archived:
-            id = request.POST.get("archived")
-            contact = models.Business.objects.get(id=id)
-            contact.archived = True
-            contact.save()
-            self.success_change_message(request, contact)
-        
-        if hasattr(response, "context_data"):
-            cl = response.context_data['cl']
-            queryset = cl.queryset
-            
-            categorized_results = {
-                "qualified": {"verbose_name": "qualified", "max_length": 90, "items": [], "next_button": False},
-                "interacted": {"verbose_name": "interacted 1º", "max_length": 15, "items": [], "next_button": False},
-                "interacted2": {"verbose_name": "interacted 2º", "max_length": 15, "items": [], "next_button": False}, 
-                "responded": {"verbose_name": "responded", "max_length": 15, "items": [], "next_button": False},
-                "contacted": {"verbose_name": "contacted", "max_length": None, "items": [], "next_button": False},
-            }
-            
-            for obj in queryset:
-                if obj.qualified:
-                    interacted = obj.comments > 0 and obj.likes > 0
-                    interacted2 = obj.comments >= 2 and obj.likes >= 2
-                    
-                    if obj.contacted and interacted:
-                        categorized_results["contacted"]["items"].append(obj)
-                    elif interacted2 and obj.interaction_responses > 0:
-                        categorized_results["responded"]["items"].append(obj)
-                    elif interacted:
-                        if interacted2: 
-                            categorized_results["interacted2"]["items"].append(obj)
-                        else:
-                            categorized_results["interacted"]["items"].append(obj)
-                    elif obj.contacted == False:
-                        categorized_results["qualified"]["items"].append(obj)
-                        
-            for index, category in enumerate(categorized_results):
-                if index + 1 == len(categorized_results): break
-                next_category = list(categorized_results.values())[index+1]
-                
-                if next_category["max_length"] != None:
-                    rest = next_category["max_length"] - len(next_category["items"])
-                    if rest > 0: categorized_results[category]["next_button"] = True
-                else:
-                    categorized_results[category]["next_button"] = True
-                
-            response.context_data['categorized_results'] = categorized_results
- 
-        return response
-    
-    def get_list_display(self, request):
-        list_display = list(super().get_list_display(request))
-        
-        def follow_contact(self):
-            csrf_token = get_token(request)
-            button_html = f'<input type="submit" value="Follow" style="padding: 8px 12px;" />'
-            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-            field = f'<input type="hidden" name="followed" value="{self.id}" />'
-            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-            html = form_html
-            return mark_safe(html)
-
-        list_display.append("followed")
-        list_display.append(follow_contact)
-        
-        def one_more_like(self):
-            csrf_token = get_token(request)
-            button_html = f'<input type="submit" value="+1 like" style="padding: 8px 12px;" />'
-            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-            field = f'<input type="hidden" name="likes" value="{self.id}" />'
-            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-            html = form_html
-            return mark_safe(html)
-
-        list_display.append("likes")
-        list_display.append(one_more_like)
-        
-        def one_more_comment(self):
-            csrf_token = get_token(request)
-            button_html = f'<input type="submit" value="+1 comment" style="padding: 8px 12px;" />'
-            csrf_html = f'<input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}" />'
-            field = f'<input type="hidden" name="comments" value="{self.id}" />'
-            form_html = f'<form method="POST">{csrf_html}{button_html}{field}</form>'
-            html = form_html
-            return mark_safe(html)
-
-        list_display.append("comments")
-        list_display.append(one_more_comment)
-        
-        list_display.append("last_post_")
-
-        return list_display
-       
-    @admin.display(description='cellphone')
-    def cellphone_(self, obj):
-        if obj.cellphone:
-            if len(obj.cellphone) == 13: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            else: 
-                return obj.cellphone
-        else:
-            return None
-    
-    @admin.display(description='instagram')
-    def instagram(self, obj: models.Business):
-        if obj.name:
-            inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
-            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        elif obj.instagram_username:
-            inner_text = obj.instagram_username
-            html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        else:
-            return "-"
- 
-    @admin.display(description='last post')
-    def last_post_(self, obj):
-        if obj.last_post:
-            return obj.last_post.strftime("%b. %d, %Y")
-        else:
-            return "-"
-
-    class Media:
-        js = ('js/admin/instagram_contacts_change_list_kanban.js',)    
 
 class BusinessInline(admin.StackedInline):
     model = models.Business
@@ -1025,6 +724,14 @@ class StaffMemberTypeAdmin(admin.ModelAdmin):
 @admin.register(models.Interaction)
 class InteractionAdmin(admin.ModelAdmin):
     form = forms.InteractionForm
+    
+@admin.register(models.InteractionStatus)
+class InteractionStatusAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.InteractionContactVia)
+class InteractionContactViaAdmin(admin.ModelAdmin):
+    pass
 
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):

@@ -1,0 +1,137 @@
+{% extends "admin/change_list.html" %}
+{% comment %} {% load admin_list %} {% endcomment %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .custom-results {
+            display: flex;
+            gap: 8px;
+        }
+        .custom-results h2 {
+            margin-bottom: 8px;
+        }
+        .custom-results-card {
+            padding: 0px !important;
+            margin: 0px !important;
+        }
+        .custom-results-card hr {
+            height: 2px;
+            margin: 2px 0px;
+        }
+        .custom-results-card li {
+            margin-bottom: 4px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            list-style-type: none;
+        }
+        .custom-results-card .button {
+            display: block; 
+            padding: 4px 8px; 
+            margin-bottom: 0px;
+            width: 100%;
+        }
+        .custom-results-card .buttons {
+            display: flex; 
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .custom-results-card .buttons form {
+            flex-grow: 1;
+        }
+        .custom-results-card-status span img {
+            position: relative;
+            top: 2px;
+        }
+        .copy_comment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-family: Consolas, monospace;  
+            background: var(--button-bg);
+            border: none;
+            color: var(--button-fg);
+            cursor: pointer;
+            transition: background 0.15s;
+            width: 72px;
+            height: 72px;
+            border-radius: 72px !important;
+            position: fixed;
+            right: 32px;
+            bottom: 32px;
+        }
+        h2.category-header {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <button class="copy_comment">
+        <div>
+            <span>Copy</span>
+            <span>comment</span>
+        </div>
+    </button>
+
+  {{ block.super }}
+{% endblock %}
+
+{% block result_list %}
+{% if kanban_layout %}
+    <form>
+        {% include "admin/businesscontact_kanban_change_list_results.html" %}
+        <div class="custom-results">
+            <form></form>
+            {% for category, objects in kanban_columns.items %}
+            <div>
+                <h2 class="category-header" id="category-header-{{category}}">
+                    <input type="checkbox" name="checkbox-{{category}}" id="checkbox-{{category}}">
+                    <span>{{ objects.verbose_name|title }} ({{objects.items|length}})</span>
+                    {% if objects.max_length %}
+                        <div>| max ({{objects.max_length}})</div>
+                    {% endif %}
+                </h2>
+                <ul class="custom-results-card" id="custom-results-card-{{category}}">
+                    {% for obj in objects.items %}
+                        <li>
+                            <span>
+                                <input type="checkbox" name="_selected_action" value="{{ obj.id }}" class="action-select action-select-{{category}}" id="action-select-{{category}}-{{ obj.id }}" aria-label="Select this object for an action - ofner">
+                                [<a href="{{obj.get_admin_change_url}}">{{ obj.id }}</a>]
+                                <a href="{{obj.get_instagram_link}}" target="_blank">{{ obj.instagram_username }}</a>
+                            </span>
+                            <hr>
+                            <span class="custom-results-card-status">
+                                {% if obj.interaction.status %}
+                                <span>Status: {{obj.interaction.status.name}}</span>
+                                <hr>
+                                <span>{{obj.interaction.follow_up_date|date:"d/m/Y H:i:s"}}</span>
+                                <hr>
+                                {% endif %}
+                                <span>
+                                    Staff member: <img src="
+                                {% if obj.staff_members.all|length > 0 %}
+                                    /static/admin/img/icon-yes.svg
+                                {% else %}
+                                    /static/admin/img/icon-no.svg
+                                {% endif %}
+                                " />
+                                </span>
+                            </span>
+                        </li>
+                    {% empty %}
+                        <li>No results found.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+</form>
+{% else %}
+  {{ block.super }}
+{% endif %}
+{% endblock %}
