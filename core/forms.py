@@ -1,13 +1,16 @@
 from django import forms
 from . import models
 
-class BusinessContactForm(forms.ModelForm):
+class BusinessForm(forms.ModelForm):
     class Meta:
         model = models.Business
         fields = "__all__"
         
     class Media:
         js = ('js/admin/instagram_contacts.js',)
+        css = {
+            'all': ('css/admin/instagram_contacts.css',)
+        }
         
 class BusinessContactProxyForm(forms.ModelForm):
     class Meta:
@@ -24,6 +27,7 @@ class BusinessKanbanForm(forms.ModelForm):
         
     class Media:
         js = ('js/admin/instagram_contacts_kanban.js',)
+        
 class InteractionForm(forms.ModelForm):
     class Meta:
         model = models.Interaction

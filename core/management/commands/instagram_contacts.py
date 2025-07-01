@@ -7,6 +7,8 @@ from core.models import Business
 from django.core.management.base import BaseCommand
 import urllib.parse
 from selenium.webdriver.support.ui import Select
+from bs4 import BeautifulSoup
+import re
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
@@ -17,7 +19,14 @@ class Command(BaseCommand):
 
         driver.get("https://lite.duckduckgo.com/lite/")
         search = input("Search: ")
-        query = f"{search} site:instagram.com"
+        sites = [
+            "site:instagram.com", 
+            "-site:instagram.com/p/", 
+            "-site:instagram.com/reel/", 
+            "-site:instagram.com/reels/", 
+            "-site:instagram.com/stories/"
+        ]
+        query = f"{search} {' '.join(sites)}"
         
         pages = int(input("Pages: ")) or 10
 
@@ -46,15 +55,41 @@ class Command(BaseCommand):
             except:
                 pass
             
-            links = driver.find_elements(By.CLASS_NAME, 'result-link')
+            body = driver.find_element(By.TAG_NAME, "body")
+            soup = BeautifulSoup(body.get_attribute("outerHTML"))
+            
             contacts = []
-            for link in links:
-                href = urllib.parse.urlparse(link.get_attribute("href"))
+            for link in soup.find_all('a', class_='result-link'):
+                href = urllib.parse.urlparse(link.get("href"))
                 business = Business()
                 username = href.path.split("/")[1]
                 if username in ("reel", "tv", "c", "p", "stories"): continue
                 business.instagram_username = username
+                
+                td = link.parent
+                tr = td.parent
+                tr_next = tr.next_sibling.next_sibling
+                result_snippet = tr_next.find("td", class_="result-snippet")
+                result_snippet_text = result_snippet.get_text()
+                
+                pattern = r'([\d,.]+K?)[ ]*Followers'
+                matches = re.search(pattern, result_snippet_text)
+                if matches:
+                    followers = matches.group(1)
+                    if "K" in followers:
+                        number = followers.replace("K", "")
+                        business.followers = int(number) * 1000
+                    else:
+                        number = followers.replace(",", "")
+                        business.followers = int(number)
+
+                    # if business.followers < 2500:
+                    #     business.archived = True
+                    #     business.save()
+                    #     continue
+                    
                 contacts.append(business)
+
                 
             Business.objects.bulk_create(contacts, ignore_conflicts=True)
                 

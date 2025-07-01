@@ -14,7 +14,7 @@ from PIL import Image, ImageFont, ImageDraw, ImageOps
 import requests
 from io import BytesIO
 import textwrap
-from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, group_horizontally, center_paste, get_dimentions, has_string_in_list, boldify, rounded_corners, generate_rectangle, audio_normalize
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, group_horizontally, center_paste, get_dimentions, has_string_in_list, boldify, rounded_corners, generate_rectangle, audio_normalize, replace_accents, get_time_offset
 from prospect.regex import WEBSITE_PATTERN
 import os
 from django.conf import settings
@@ -145,13 +145,22 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 # class Kanban():
     
+
     
-        
+@admin.register(models.Interaction)
+class InteractionAdmin(admin.ModelAdmin):
+    form = forms.InteractionForm
+    search_fields = ["name"]
+
+class InteractionInline(admin.StackedInline):
+    model = models.Interaction
+    extra = 0
     
 @admin.register(models.Business)
 class BusinessAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "contacted", "archived"]
-    list_display = ["id", "instagram", "cellphone_", "telephone", "website_", "website2_", "last_post_"]
+    list_display = ["id", "instagram", "phone_", "website_", "followers_", "last_post_", "archived"]
+    list_editable = ('archived',)
     actions = [
         actions.test_chunk,
         actions.get_instagram_data, 
@@ -159,32 +168,35 @@ class BusinessAdmin(admin.ModelAdmin):
         actions.qualify, 
         actions.contacted, 
         actions.archive,
+        actions.archive_followers,
         actions.open_link,
         actions.set_contact_quality,
         actions.check_whatsapp_websites,
         actions.follow,
         actions.open_selenium,
-        actions.check_search_engine
+        actions.check_search_engine,
+        actions.test_selenium_session
     ]
-    search_fields = ["id", "instagram_username", "website", "cellphone"]
+    search_fields = ["id", "instagram_username", "website", "cellphone", "telephone"]
     autocomplete_fields = ["template", "interaction"]
     change_form_template = 'admin/businesscontact_change_form.html'
     change_list_template = 'admin/businesscontact_change_list.html'
     filter_horizontal = ('staff_members',)
-    form = forms.BusinessContactForm
+    form = forms.BusinessForm
     kanban_layout = False
     kanban_columns = {
         "qualified": {"verbose_name": "qualified", "max_length": None, "filter": "qualified_filter"},
         "follow_up": {"verbose_name": "follow up", "max_length": None, "filter": "follow_up_filter"},
         "no_reply": {"verbose_name": "no reply", "max_length": None, "filter": "no_reply_filter"},
-        "maybe_in_the_future": {"verbose_name": "maybe in the future", "max_length": None, "filter": "maybe_in_the_future_filter"},
+        # "maybe_in_the_future": {"verbose_name": "maybe in the future", "max_length": None, "filter": "maybe_in_the_future_filter"},
         "meeting": {"verbose_name": "meeting", "max_length": None, "filter": "meeting_filter"},
         "finish": {"verbose_name": "finish", "max_length": None, "filter": "finish_filter"},
     }
     
     def qualified_filter(self, response):
         qs = response.context_data['cl'].queryset
-        qs = qs.filter(qualified=True, archived=False, contacted=False, interaction__isnull=True)
+        qs = qs.filter(qualified=True, archived=False, contacted=False)
+        qs = qs.exclude(interaction__status__name__in=("Maybe in the future", "Follow up", "No reply", "Meeting", "Finish", "Future"))
         return qs
     
     def follow_up_filter(self, response):
@@ -217,12 +229,13 @@ class BusinessAdmin(admin.ModelAdmin):
     
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context=extra_context)
-        response.context_data['kanban_layout'] = self.kanban_layout
-        response.context_data['kanban_columns'] = self.kanban_columns
-        for category, objects in self.kanban_columns.items():
-            filter_name = objects.get("filter")
-            filter = getattr(self, filter_name)
-            objects["items"] = filter(response)
+        if self.kanban_layout and hasattr(response, "context_data"):
+            response.context_data['kanban_layout'] = self.kanban_layout
+            response.context_data['kanban_columns'] = self.kanban_columns
+            for category, objects in self.kanban_columns.items():
+                filter_name = objects.get("filter")
+                filter = getattr(self, filter_name)
+                objects["items"] = filter(response)
         return response 
     
     def get_list_filter(self, request):
@@ -367,12 +380,13 @@ class BusinessAdmin(admin.ModelAdmin):
         help_texts = { "help_texts": {} }
         if obj:
             if obj.name:
-                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={obj.name}"
+                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.name)}"
                 html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">casadosdados</a>'
                 href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
                 html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
                 html3 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
-                html = " | ".join([html1, html2, html3])
+                html4 = "<a href='/' id='id_name_copy'>Copy name</a>"
+                html = " | ".join([html1, html2, html3, html4])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
             if obj.cellphone:
@@ -398,7 +412,33 @@ class BusinessAdmin(admin.ModelAdmin):
                 html3 = f'<a href="{href3}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
                 html = " | ".join([html1, html2, html3])
                 help_texts["help_texts"].update({"instagram_username": mark_safe(html)}) 
+            
+            if obj.email:
+                href1 = f"https://duckduckgo.com/?t=ffab&q={obj.email + ' CNPJ'}"
+                html1 = f'<a href="{href1}" target="_blank">Search CNPJ</a>'
+                html = " | ".join([html1])
+                help_texts["help_texts"].update({"email": mark_safe(html)})
+            
+            if obj.address:
+                href1 = f"https://duckduckgo.com/?t=ffab&q={obj.address + ' CNPJ'}"
+                html1 = f'<a href="{href1}" target="_blank">Search CNPJ</a>'
+                href2 = f"https://www.google.com/maps/search/{obj.address}"
+                html2 = f'<a href="{href2}" target="_blank">Google Maps</a>'
+                html = " | ".join([html1, html2])
+                help_texts["help_texts"].update({"address": mark_safe(html)})
                 
+            if obj.staff_members:
+                inner_text = "Open Staff Member"
+                style = "display: block; margin: 0px auto 8px;"
+                id = "open-staff-member"
+                html1 = f'<button id="{id}" style="{style}">{inner_text}</button>'
+                html = " | ".join([html1])
+                help_texts["help_texts"].update({"staff_members": mark_safe(html)})
+                
+            if obj.last_post:
+                help_text = get_time_offset(obj.last_post)
+                help_texts["help_texts"].update({"last_post": help_text})
+            
             kwargs.update(help_texts)
                 
         return super().get_form(request, obj, **kwargs)
@@ -416,57 +456,72 @@ class BusinessAdmin(admin.ModelAdmin):
         else:
             return "-"
         
-    @admin.display(description='last post')
-    def last_post_(self, obj):
+    @admin.display(description='last post', ordering='-last_post')
+    def last_post_(self, obj: models.Business):
         if obj.last_post:
-            return obj.last_post.strftime("%b. %d, %Y")
+            title = obj.last_post.strftime("%b. %d, %Y")
+            inner_text = get_time_offset(obj.last_post)
+            html = f"<span title='{title}'>{inner_text}</span>"
+            return mark_safe(html)
         else:
-            return "-"
+            return None
 
     @admin.display(description='website')
-    def website_(self, obj):
+    def website_(self, obj: models.Business):
+        html = []
+        
         if obj.website:
             leng = 30
             inner_text = obj.website[0:leng - 1] if len(obj.website) > leng else obj.website
             if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
-            html = f'<a href="{obj.website}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        else:
-            return "-"
-        
-    @admin.display(description='website2')
-    def website2_(self, obj):
+            html1 = f'<a href="{obj.website}" target="_blank">{inner_text}</a>'
+            html.append(mark_safe(html1))
+            
         if obj.website2:
             leng = 30
             inner_text = obj.website2[0:leng - 1] if len(obj.website2) > leng else obj.website2
             if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
-            html = f'<a href="{obj.website2}" target="_blank">{inner_text}</a>'
-            return mark_safe(html)
-        else:
-            return "-"
+            html2 = f'<a href="{obj.website2}" target="_blank">{inner_text}</a>'
+            html.append(mark_safe(html2))
         
-    @admin.display(description='cellphone')
-    def cellphone_(self, obj):
+        return mark_safe("<br style='margin-bottom: 4px;'/>".join(html))
+        
+    @admin.display(description='phone')
+    def phone_(self, obj: models.Business):
         if obj.cellphone:
-            if len(obj.cellphone) == 13: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"+{obj.cellphone[0:2]} ({obj.cellphone[2:4]}) {obj.cellphone[4]} {obj.cellphone[5:9]}-{obj.cellphone[9:13]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            if len(obj.cellphone) == 11 and int(obj.cellphone[2]) == 9: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"({obj.cellphone[0:2]}) {obj.cellphone[2]} {obj.cellphone[3:7]}-{obj.cellphone[7:11]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            elif len(obj.cellphone) == 9 and int(obj.cellphone[0]) == 9: 
-                link_number = obj.get_whatsapp_link(add_message=False)
-                inner_text = f"{obj.cellphone[0:1]} {obj.cellphone[1:5]}-{obj.cellphone[5:9]}"
-                whatsapp = f'<a href="{link_number}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-                return mark_safe(whatsapp)
-            else: 
-                return obj.cellphone
+            href = obj.get_whatsapp_link(False)
+            inner_text = obj.fcellphone()
+            whatsapp = f'[C] <a href="{href}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+            return mark_safe(whatsapp)
+        elif obj.telephone:
+            href = obj.get_whatsapp_link(False)
+            inner_text = obj.ftelephone()
+            whatsapp = f'[T] <a href="{href}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+            return mark_safe(whatsapp)
         else:
             return None
+        
+    @admin.display(description='followers', ordering='-followers')
+    def followers_(self, obj: models.Business):
+        style = ""
+        result = None
+        if obj.followers and obj.followers >= 1000:
+            result = f"{int(obj.followers / 1000)}K"
+        elif obj.followers and obj.followers < 1000:
+            result = obj.followers
+        
+        if obj.followers and obj.followers >= 20000:
+            style = "color: #dfff00;"
+        elif obj.followers and obj.followers >= 3000:
+            style = "color: green;"
+        elif obj.followers and obj.followers < 3000:
+            style = "color: red;"
+            
+        if obj.followers:
+            html = f'<span style="{style}" title="{obj.followers}">{result}</span>'
+            return mark_safe(html)
+        else:
+            return result
 
     
 @admin.register(models.BusinessKanban)
@@ -474,6 +529,8 @@ class BusinessKanbanAdmin(BusinessAdmin):
     list_filter = []
     kanban_layout = True
     
+    class Media:
+        js = ('js/admin/instagram_contacts_change_list_kanban.js',)
 
 class BusinessInline(admin.StackedInline):
     model = models.Business
@@ -721,10 +778,11 @@ class StaffMemberTypeAdmin(admin.ModelAdmin):
     pass
 
 
-@admin.register(models.Interaction)
-class InteractionAdmin(admin.ModelAdmin):
-    form = forms.InteractionForm
-    search_fields = ["name"]
+# @admin.register(models.Interaction)
+# class InteractionAdmin(admin.ModelAdmin):
+#     form = forms.InteractionForm
+#     search_fields = ["name"]
+    
 @admin.register(models.InteractionStatus)
 class InteractionStatusAdmin(admin.ModelAdmin):
     pass

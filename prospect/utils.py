@@ -11,7 +11,8 @@ import cairosvg
 from moviepy.editor import VideoFileClip, AudioFileClip
 import numpy as np
 from moviepy.decorators import audio_video_fx
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from django.utils.translation import gettext_lazy as _
 
 @audio_video_fx
 def audio_normalize(clip: AudioFileClip):
@@ -55,6 +56,7 @@ def get_phone(value: str):
         re.search(r"\(\d{2}\)9 \d{4}-\d{4}", value), # '(99)9 9999-9999'
         re.search(r"\(\d{2}\)\d{5}-\d{4}", value), # '(99)99999-9999'
         re.search(r"\(\d{2}\)9.\d{4}-\d{4}", value), # '(99)9.9999-9999'
+        re.search(r"\(\d{2}\) 9.\d{4}-\d{4}", value), # '(99) 9.9999-9999'
         re.search(r"\d{7}-\d{4}", value), # '9999999-9999'
         re.search(r"\(\d{2}\)\d{9}", value), # '(99)999999999'
         re.search(r"\d{2} \d{5}-\d{4}", value), # '99 99999-9999'
@@ -120,7 +122,7 @@ def has_string_in_list(string: str | list[str], string_list: list[str], case_sen
     result = False
     strings = []
     
-    if type(string) == str:
+    if type(string) == str and len(string):
         strings.append(string)
     elif all(isinstance(s, str) for s in string):
         strings.extend(string)
@@ -170,11 +172,12 @@ def close_tab(driver: webdriver.Firefox, index_tab: int):
     driver.close()
     driver.switch_to.window(driver.window_handles[index_tab])
     
-def selenium_click(driver: webdriver.Firefox, element: WebElement):
+def selenium_click(driver: webdriver.Firefox, element: WebElement, sleep: int | None = None):
     driver.execute_script("arguments[0].click();", element)
+    if type(sleep) == int: time.sleep(sleep)
 
 # times = 1
-def try_white(
+def try_while(
         callback, 
         times: int = 1, 
         sleep_initial: int | None = None, 
@@ -574,3 +577,50 @@ def normalize_audio(clip_path: str, target_dBFS=-1.0, sample_duration=5, fps=441
     # Apply volume adjustment
     normalized_audio = audio.volumex(factor)
     return clip.set_audio(normalized_audio)
+
+def is_multiple_of(a, b, eps=1e-10):
+    return abs(a % b) < eps
+
+def get_time_offset(my_datetime: datetime):
+    time = None
+    if datetime.now(timezone.utc) > my_datetime:
+        time = datetime.now(timezone.utc) - my_datetime
+    else:
+        time = my_datetime - datetime.now(timezone.utc)
+        
+    result = ""
+    
+    if time.days == 0:
+        hours = int(time.total_seconds()/60.0/60.0)
+        
+        if hours == 0:
+            minutes = int(time.total_seconds()/60.0)
+            
+            if minutes == 0:
+                seconds = int(time.total_seconds())
+                result = _(f"{seconds}s")
+            else:
+                result = _(f"{minutes} min")
+            
+        else: 
+            result = _(f"{hours}h")
+        
+    elif time.days == 1:
+        result = _(f"{time.days} day")
+    elif time.days >= 2 and time.days <= 30:
+        result = _(f"{time.days} days")
+    else:
+        months = int(time.days / 30)
+        if months == 1:
+            result = _(f"{months} month")
+        elif months >= 2 and months <= 12:
+            result = _(f"{months} months")
+        else:
+            years = int(months / 12)
+            if years == 1:
+                result = _(f"{years} year")
+            elif years >= 2:
+                result = _(f"{years} years")
+            
+    return result
+

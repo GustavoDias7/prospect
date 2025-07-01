@@ -1,5 +1,5 @@
 from django.db import models
-from prospect.utils import remove_non_numeric, has_string_in_list
+from prospect.utils import remove_non_numeric, has_string_in_list, get_time_offset
 import datetime
 from pytz import timezone
 from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD, COLORS, INTERACTION_CONTACTS, INTERACTION_STATUS
@@ -124,7 +124,11 @@ class StaffMember(models.Model):
         return ddd
             
     def __str__(self):
-        if self.name: return self.name
+        if self.name: 
+            if self.type:
+                return f"{self.name} ({self.type.name})"
+            else:
+                return self.name
         else: return f"Staff Member {self.id}"
         
 class StaffMemberType(models.Model):
@@ -151,7 +155,9 @@ class Business(models.Model):
     last_post = models.DateTimeField(default=None, null=True, blank=True)
     archived = models.BooleanField(default=False)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
-    interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL)
+    interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL, related_name="business")
+    followers = models.PositiveIntegerField(null=True, blank=True)
+    following = models.PositiveIntegerField(null=True, blank=True)
     
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
@@ -225,7 +231,7 @@ class Business(models.Model):
             if len(self.cellphone) == 11 and int(self.cellphone[2]) == 9: 
                 return f"({self.cellphone[0:2]}) {self.cellphone[2]} {self.cellphone[3:7]}-{self.cellphone[7:11]}"
             elif len(self.cellphone) == 9 and int(self.cellphone[0]) == 9: 
-                return f"{self.cellphone[0:5]}-{self.cellphone[5:9]}"
+                return f"{self.cellphone[0]} {self.cellphone[1:5]}-{self.cellphone[5:9]}"
             else: 
                 return self.cellphone
         else:
@@ -282,12 +288,10 @@ class Business(models.Model):
     def __str__(self):
         if self.instagram_username: return self.instagram_username
         else: return f"Instagram {self.id}"
-    
     class Meta:
         verbose_name = "Business"
         verbose_name_plural = "Business"
 
- 
 class BusinessKanban(Business):
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
@@ -302,6 +306,30 @@ class Interaction(models.Model):
     date = models.DateTimeField(auto_now_add=True, null=True, blank=True) #first interaction
     follow_up_date = models.DateTimeField(default=None, null=True, blank=True)
     observation = models.TextField(max_length=400, null=True, blank=True)
+    # business = models.ForeignKey(Business, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    def offset_date(self):
+        return get_time_offset(self.follow_up_date)
+    
+    def follow_up_color(self):
+        now = datetime.datetime.now(timezone('America/Sao_Paulo'))
+        
+        if self.follow_up_date:
+            before_now = now < self.follow_up_date
+            until_30min = now < self.follow_up_date + datetime.timedelta(minutes=31)
+            until_1hour = now < self.follow_up_date + datetime.timedelta(hours=1)
+            after_1hour = now >= self.follow_up_date - datetime.timedelta(hours=1)
+            
+            if before_now:
+                return "yellow"
+            elif until_30min:
+                return "dark_green"
+            elif until_1hour:
+                return "lima_green"
+            elif after_1hour:
+                return "red"
+        else:
+            return ""
     
     def __str__(self):
         if self.status:

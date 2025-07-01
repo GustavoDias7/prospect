@@ -26,6 +26,7 @@ window.addEventListener("load", function () {
         await waitFor(ms);
       }
     }
+    
     function copy_field_value({
       button_id = "",
       field_id = "",
@@ -36,78 +37,77 @@ window.addEventListener("load", function () {
     }) {
       const button = document.getElementById(button_id);
       const field = document.getElementById(field_id);
-      if (button === null || field === null) return;
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        let text = "";
+      if (button) {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          let text = "";
 
-        if (first_word) {
-          text = field.innerText.trim().split(" ")[0];
-        } else {
-          text = field.innerText.trim();
-        }
-
-        if (message) {
-          let formatted_message = "";
-
-          if (message.includes("{field_value}")) {
-            formatted_message = message.replace("{field_value}", text);
+          if (first_word) {
+            if (field.innerText) {
+              text = field.innerText.trim().split(" ")[0];
+            } else if (field.value) {
+              text = field.value.trim().split(" ")[0];
+            }
+          } else {
+            if (field.innerText) {
+              text = field.innerText.trim();
+            } else if (field.value) {
+              text = field.value.trim();
+            }
           }
 
-          let shift = "";
-          if (message.includes("{shift}")) {
-            const now = new Date();
-            const hour = now.getHours();
-            const morning = hour >= 6 && hour <= 11;
-            const afternoon = hour >= 12 && hour <= 17;
-            const night = hour >= 18;
+          if (message) {
+            let formatted_message = "";
 
-            if (morning) {
-              shift = "bom dia";
-            } else if (afternoon) {
-              shift = "boa tarde";
-            } else if (night) {
-              shift = "boa noite";
+            if (message.includes("{field_value}")) {
+              formatted_message = message.replace("{field_value}", text);
             }
 
-            formatted_message = formatted_message.replace("{shift}", shift);
+            let shift = "";
+            if (message.includes("{shift}")) {
+              const now = new Date();
+              const hour = now.getHours();
+              const morning = hour >= 6 && hour <= 11;
+              const afternoon = hour >= 12 && hour <= 17;
+              const night = hour >= 18;
+
+              if (morning) {
+                shift = "bom dia";
+              } else if (afternoon) {
+                shift = "boa tarde";
+              } else if (night) {
+                shift = "boa noite";
+              }
+
+              formatted_message = formatted_message.replace("{shift}", shift);
+            }
+
+            text = formatted_message;
           }
 
-          text = formatted_message;
-        }
+          navigator.clipboard.writeText(lower ? text.toLowerCase() : text);
 
-        navigator.clipboard.writeText(lower ? text.toLowerCase() : text);
-
-        if (is_alert) {
-          alert(`Copy content to clipboard: \n\n ${text}`);
-        }
-      });
-    }
-    function normalize_name({ button_id = "", field_id = "" }) {
-      const button = $(`#${button_id}`);
-      const field = $(`#${field_id}`);
-      button.on("click", function (event) {
-        event.preventDefault();
-        const value_field = field
-          .val()
-          .split(" ")
-          .map((word) => {
-            return (
-              word.charAt(0).toUpperCase() + word.substring(1).toLowerCase()
-            );
-          })
-          .join(" ");
-        field.val(value_field);
-      });
+          if (is_alert) {
+            alert(`Copy content to clipboard: \n\n ${text}`);
+          }
+        });
+      }
     }
 
     copy_field_value({
       button_id: "copy-message",
       field_id: "rendered-template",
     });
+
+    copy_field_value({
+      button_id: "id_name_copy",
+      field_id: "id_name",
+    });
+    counterCharacters("id_name");
     counterCharacters("id_cellphone");
     counterCharacters("id_telephone");
     counterCharacters("id_cnpj");
+    counterCharacters("id_address");
 
     $("#changelist-form").on("submit", async function (event) {
       if ($("[value='open_link']").is(":selected")) {
@@ -132,7 +132,14 @@ window.addEventListener("load", function () {
         );
       }
     });
-    normalize_name({ button_id: "id_name_normalize", field_id: "id_name" });
+
+    $('#open-staff-member').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_staff_members_to, #id_staff_members_from").find('option:selected');
+      selectedOptions.each(function () {
+        window.open(`/admin/core/staffmember/${$(this).val()}/change/`, '_blank');
+      });
+    });
 
     const images = document.querySelectorAll(".business_contact_image");
     images.forEach((image) => {

@@ -67,6 +67,34 @@
             align-items: center;
             gap: 4px;
         }
+        .follow-up {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .follow-up-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 12px;
+        }
+        .follow-up-color.yellow {
+            background-color: yellow;
+            color: var(--border-color);
+        }
+        .follow-up-color.dark_green {
+            background-color: green;
+        }
+        .follow-up-color.lima_green {
+            background-color: greenyellow;
+            color: var(--border-color);
+        }
+        .follow-up-color.red {
+            background-color: red;
+        }
+        .user-icon {
+            width: 10px;
+        }
     </style>
 {% endblock %}
 
@@ -102,25 +130,34 @@
                             <span>
                                 <input type="checkbox" name="_selected_action" value="{{ obj.id }}" class="action-select action-select-{{category}}" id="action-select-{{category}}-{{ obj.id }}" aria-label="Select this object for an action - ofner">
                                 [<a href="{{obj.get_admin_change_url}}">{{ obj.id }}</a>]
-                                <a href="{{obj.get_instagram_link}}" target="_blank">{{ obj.instagram_username }}</a>
+                                <a href="{{obj.get_instagram_link}}" target="_blank">{{ obj.instagram_username }}</a> 
+                                <img 
+                                class="user-icon"
+                                src="{% if obj.staff_members.all|length > 0 %}
+                                    /static/img/user-true.svg
+                                {% else %}
+                                    /static/img/user-false.svg
+                                {% endif %}
+                                " 
+                                title="{% if obj.staff_members.all|length > 0 %}Staff member: true{% else %}Staff member: false{% endif %}"
+                                />
                             </span>
-                            <hr>
                             <span class="custom-results-card-status">
                                 {% if obj.interaction.status %}
+                                <hr>
                                 <span>Status: {{obj.interaction.status.name}}</span>
-                                <hr>
-                                <span>{{obj.interaction.follow_up_date|date:"d/m/Y H:i:s"}}</span>
-                                <hr>
                                 {% endif %}
-                                <span>
-                                    Staff member: <img src="
-                                {% if obj.staff_members.all|length > 0 %}
-                                    /static/admin/img/icon-yes.svg
-                                {% else %}
-                                    /static/admin/img/icon-no.svg
-                                {% endif %}
-                                " />
                                 </span>
+                                {% if obj.interaction.follow_up_date %}
+                                <hr>
+                                <span class="follow-up">
+                                    <b>[ {{obj.interaction.offset_date}} ]</b>
+                                    <span title="{{obj.interaction.follow_up_date|date:"d/m/Y H:i:s"}}">
+                                        {{obj.interaction.follow_up_date|date:"d/m H:i"}} 
+                                    </span>
+                                    <i class="follow-up-color {{obj.interaction.follow_up_color}}"></i>
+                                </span>
+                                {% endif %}
                             </span>
                         </li>
                     {% empty %}

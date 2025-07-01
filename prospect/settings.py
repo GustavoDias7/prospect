@@ -21,6 +21,7 @@ LINKEDIN_USERNAME = env('LINKEDIN_USERNAME')
 LINKEDIN_PASSWORD = env('LINKEDIN_PASSWORD')
 INSTAGRAM_USERNAME = env('INSTAGRAM_USERNAME')
 INSTAGRAM_PASSWORD = env('INSTAGRAM_PASSWORD')
+FIREFOX_PROFILE = env('FIREFOX_PROFILE')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

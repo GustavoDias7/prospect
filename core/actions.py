@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 import re
 import time
@@ -8,7 +9,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_white, save_cookies, load_cookies, log_link)
+from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of)
 from prospect.constants import Colors, COMMENTS
 from . import models
 from datetime import datetime, timedelta
@@ -121,6 +122,14 @@ def not_contacted(modeladmin, request, queryset):
 def archive(modeladmin, request, queryset):
     queryset.update(archived=True)
     
+    
+@admin.action(description="Archive by followers", permissions=["change"])
+def archive_followers(modeladmin, request, queryset: QuerySet[models.Business]):
+    for query in queryset:
+        if query.followers != None and query.followers < 3000:
+            query.archived = True
+            query.save()
+    
 @admin.action(description="Has menu", permissions=["change"])
 def has_menu(modeladmin, request, queryset):
     queryset.update(menu=True)
@@ -136,41 +145,53 @@ def open_selenium(modeladmin, request, queryset):
     pass
  
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
-def get_instagram_data(modeladmin, request, queryset):
+def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business]):
     options = Options()
-    # options.add_argument("--headless")
+    profile_path = f"/home/vboxuser/.mozilla/firefox/{settings.FIREFOX_PROFILE}"
+    options.profile = str(profile_path)
     driver = webdriver.Firefox(options=options)
     driver.get("https://www.instagram.com/")
     
     time.sleep(5)
     
-    try:
-        form = driver.find_element(By.ID, "loginForm")
-        username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
-        password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
-        
-        username.send_keys(settings.INSTAGRAM_USERNAME)
-        password.send_keys(settings.INSTAGRAM_PASSWORD)
-        form.submit()
-    except:
+    login = input("Do you want to login first? ")
+    if login.lower() == "y" or login.lower() == "yes":
         try:
-            form = driver.find_element(By.ID, "login_form")
-            username = driver.find_element(By.CSS_SELECTOR, "input[name='email']")
-            password = driver.find_element(By.CSS_SELECTOR, "input[name='pass']")
+            form = driver.find_element(By.ID, "loginForm")
+            username = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
+            password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
             
             username.send_keys(settings.INSTAGRAM_USERNAME)
             password.send_keys(settings.INSTAGRAM_PASSWORD)
             form.submit()
         except:
-            pass
-            
-    open_tab(driver, "https://web.whatsapp.com/", 1)
-    input("Press enter to continue ")
-    close_tab(driver, 0)
+            try:
+                form = driver.find_element(By.ID, "login_form")
+                username = driver.find_element(By.CSS_SELECTOR, "input[name='email']")
+                password = driver.find_element(By.CSS_SELECTOR, "input[name='pass']")
+                
+                username.send_keys(settings.INSTAGRAM_USERNAME)
+                password.send_keys(settings.INSTAGRAM_PASSWORD)
+                form.submit()
+            except:
+                pass
+                
+        open_tab(driver, "https://web.whatsapp.com/", 1)
+        input("Press enter to continue ")
+        close_tab(driver, 0)
+    
             
     for index, query in enumerate(queryset):
         print("=============================")
-        print(f"{index + 1} of {len(queryset)} - id: {query.id}")
+        print(f"[{query.id}] {index + 1} of {len(queryset)}")
+        
+        # stop in the top of multiple + 1 element
+        if is_multiple_of((index+1), 20) and (index+1) != len(queryset): 
+            min = 5
+            print(f"Waiting {min}min.")
+            time.sleep(60 * min) 
+            print("Continuing.")
+            
         try:
             driver.get(query.get_instagram_link())
         except Exception as e:
@@ -189,6 +210,18 @@ def get_instagram_data(modeladmin, request, queryset):
                     query.save()
                     print("disqualified from page not available")
                     continue
+                
+                elif "No Posts Yet" in body_html:
+                    query.qualified = False
+                    query.save()
+                    print("disqualified from page without posts")
+                    continue
+                
+                elif "This account is private" in body_html:
+                    query.qualified = False
+                    query.save()
+                    print("disqualified from private account")
+                    continue
         except:
             pass
     
@@ -204,8 +237,32 @@ def get_instagram_data(modeladmin, request, queryset):
                     
         disqualified_websites = models.Website.objects.filter(qualified=False)
         
+        # get the followers
+        # archived less them 3k
+        try:
+            followers = None
+            
+            try:
+                followers = driver.find_element(By.CSS_SELECTOR, "section > ul > li > div > a > span > span")
+            except:
+                followers = driver.find_element(By.CSS_SELECTOR, "section > ul > li > div > button > span > span")
+            
+            followers_number = followers.get_attribute("title")
+            if "K" in followers_number:
+                number = followers_number.replace("K", "")
+                query.followers = int(number) * 1000
+                query.save()
+            else:
+                number = followers_number.replace(",", "")
+                query.followers = int(number)
+                query.save()
+        except Exception as e:
+            print(e)
+            
+        
         role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
         if role_buttons and len(role_buttons) > 0:
+            time.sleep(1)
             
             # open "more" button from bio
             for role_button in role_buttons:
@@ -258,9 +315,15 @@ def get_instagram_data(modeladmin, request, queryset):
                     elif is_telephone(phone_number):
                         query.telephone = phone_number
                     break
-        
-        # check for other countries
-        
+                
+            # get address from h1 element in the bio
+            address = None
+            try:
+                address = driver.find_element(By.CSS_SELECTOR, "section > div > h1")
+                query.address = address.get_attribute("innerText") or None
+            except:
+                pass
+                
         highlights = driver.find_elements(By.CSS_SELECTOR, "section ul > li [role='button']")
         if highlights and len(highlights) > 0:
             for highlight in highlights:
@@ -287,7 +350,7 @@ def get_instagram_data(modeladmin, request, queryset):
         if buttons:
             for button in buttons:
                 outer_text = button.get_attribute("outerText")
-                if " + " in outer_text:
+                if has_string_in_list((" + ", " and "), [outer_text]):
                     button.click()
                     time.sleep(0.5)
                     break
@@ -312,11 +375,9 @@ def get_instagram_data(modeladmin, request, queryset):
                 
                 for ws in websites.filter(bitly=True, linktree=False):
                     if ws.website in website:
-                        print("website before:", website)
                         response = requests.get(website)
                         redirect_website = response.url
                         website = redirect_website
-                        print("website after:", website)
                         break
                 
                 for ws in websites:
@@ -395,27 +456,33 @@ def get_instagram_data(modeladmin, request, queryset):
                         
                     close_tab(driver=driver, index_tab=0)
         
+        # if query.followers < 3000:
+        #     query.archived = True
+        #     query.save()
+        #     continue
+        
         try:
-            posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div a")
+            posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div div > div > a")
             if posts and len(posts) > 0:
                 for post in posts:
                     text_post = post.get_attribute("text")
                     if "Pinned" not in text_post:
-                        selenium_click(driver, post)
+                        selenium_click(driver, post, 2)
                         
+                        js_last_post_element = None
                         try:
                             js_last_post_element = driver.find_element(By.CSS_SELECTOR, "a > span > time")
                         except:
                             js_last_post_element = None
-                            
+                        
                         if js_last_post_element:
                             js_last_post = js_last_post_element.get_attribute("dateTime")
                             last_post = datetime.fromisoformat(js_last_post.replace("Z", "+00:00"))
                             query.last_post = last_post
                             limit_datetime = timezone.now() - timedelta(days=30 * 8)
-                            if last_post <= limit_datetime:
-                                query.qualified = False
-                                print("disqualified from last post")
+                            # if last_post <= limit_datetime:
+                            #     query.qualified = False
+                            #     print("disqualified from last post")
                         
                         # close post modal
                         role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
@@ -492,19 +559,39 @@ def get_instagram_data(modeladmin, request, queryset):
         #     print("check the whatsapp")
         # if False:
             open_tab(driver=driver, search=query.get_whatsapp_link(add_message=False), index_tab=1)
-            
+            # check "O número de telefone compartilhado por url é inválido." message
             def check_whatsapp():
                 result = False
                 
                 try:
+                    time.sleep(1)
                     role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
                     if role_buttons and len(role_buttons) >= 1:
                         # open "Profile details" sidebar
                         for role_button in role_buttons:
                             title_attr = role_button.get_attribute("title")
-                            terms = ("Profile details", "Dados de perfil")
-                            if any(item in title_attr for item in terms):
+                            terms = ("Profile details", "Dados do perfil")
+                            if has_string_in_list(title_attr, terms):
                                 driver.execute_script("arguments[0].click();", role_button)
+                                
+                                try:
+                                    address = driver.find_element(By.CSS_SELECTOR, "a[href*='maps.google.com']")
+                                    href_maps = address.get_attribute("href")
+                                    address_url_maps = href_maps.split("/")[5]
+                                    address_url_maps = urllib.parse.unquote(address_url_maps)
+                                    
+                                    # query.address == None -> not found in the bio
+                                    if query.address == None:
+                                        query.address = address_url_maps
+                                    elif query.website2 == None:
+                                        query.website2 = href_maps
+                                    elif query.website == None:
+                                        query.website = href_maps
+                                    elif len(query.address) < len(address_url_maps):
+                                        query.address = address_url_maps
+                                except:
+                                    pass
+                            
                                 time.sleep(2)
                                 break
                 except Exception as e:
@@ -563,7 +650,7 @@ def get_instagram_data(modeladmin, request, queryset):
                     
                 return result
             
-            try_white(
+            try_while(
                 callback=check_whatsapp, 
                 times=3,
                 sleep_initial=15,
@@ -571,18 +658,10 @@ def get_instagram_data(modeladmin, request, queryset):
             )
             
             close_tab(driver=driver, index_tab=0)
-        
+        print("address:", query.address)
         query.save()
         print("=============================")
-
-        my_index = index + 1
-        len_chunk = 20
-        chunk = my_index % len_chunk == 0
-        not_last = my_index != len(queryset)
-        if chunk and not_last: 
-            print("wating...")
-            time.sleep(60 * 5) 
-            print("contining")
+        
         
     driver.close()
 
@@ -595,7 +674,7 @@ def test_chunk(modeladmin, request, queryset):
         chunk = my_index % len_chunk == 0
         not_last = my_index != len(queryset)
         if chunk and not_last: 
-            print("wating...")
+            print("waiting...")
             time.sleep(5) 
             print("contining")
 
@@ -1020,7 +1099,7 @@ def check_whatsapp_websites(modeladmin, request, queryset):
                     
                 return result
             
-            try_white(
+            try_while(
                 callback=check_whatsapp, 
                 times=4,
                 sleep_initial=15,
@@ -1481,4 +1560,87 @@ def help_comments(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[mode
                 
         except Exception as e:
             print(e)
+
+@admin.action(description="Get address", permissions=["change"])
+def test_selenium_session(modeladmin, request, queryset: QuerySet[models.Business]):
+    # Replace this with the actual path to your saved profile
+    profile_path = f"/home/vboxuser/.mozilla/firefox/{settings.FIREFOX_PROFILE}"
+
+    options = Options()
+
+    # Important: use 'options.profile' for actual reuse
+    options.profile = str(profile_path)
+    driver = webdriver.Firefox(options=options)
+    
+    # Now you can interact with Firefox using the saved session
+    
+    for index, query in enumerate(queryset):
+        driver.get(query.get_whatsapp_link())
         
+        # time.sleep(5)
+        
+        # address = None
+        # try:
+        #     address = driver.find_element(By.CSS_SELECTOR, "section > div > h1")
+        #     address = address.get_attribute("innerText")
+        # except:
+        #     pass
+        
+        # try:
+        #     address = driver.find_element(By.CSS_SELECTOR, "a[href*='maps.google.com']")
+        #     href_maps = address.get_attribute("href")
+        #     url_maps = urllib.parse.urlparse(href_maps)
+        #     query_params = urllib.parse.parse_qs(url_maps.query)
+        #     print(query_params)
+        #     # u_param = query_params.get('u', [None])[0]
+            
+        #     address
+        # except:
+        #     pass
+        
+        # print(address)
+        
+        def check_whatsapp():
+            result = False
+            
+            try:
+                time.sleep(5)
+                role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+                if role_buttons and len(role_buttons) >= 1:
+                    result = True
+                    # open "Profile details" sidebar
+                    for role_button in role_buttons:
+                        title_attr = role_button.get_attribute("title")
+                        
+                    for role_button in role_buttons:
+                        title_attr = role_button.get_attribute("title")
+                        if len(title_attr) == 0: continue
+                        terms = ("Profile details", "Dados do perfil")
+                        if has_string_in_list(title_attr, terms):
+                            driver.execute_script("arguments[0].click();", role_button)
+                            # role_button.click()
+                            
+                            try:
+                                address = driver.find_element(By.CSS_SELECTOR, "a[href*='maps.google.com']")
+                                href_maps = address.get_attribute("href")
+                                href_maps.split("/")[5]
+                                # print(redirect_website)
+                            except:
+                                pass
+                            
+                            time.sleep(2)
+                            break
+            except Exception as e:
+                print("Exception:", e)
+                
+            return result
+        
+        try_while(
+            callback=check_whatsapp, 
+            times=3,
+            sleep_initial=15,
+            sleep_after=10
+        )
+    
+    input("Press Enter to quit browser. ")
+    driver.quit()
