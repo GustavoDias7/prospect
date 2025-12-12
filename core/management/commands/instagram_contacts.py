@@ -3,7 +3,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import time
-from core.models import Business
+from core import models
 from django.core.management.base import BaseCommand
 import urllib.parse
 from selenium.webdriver.support.ui import Select
@@ -45,6 +45,8 @@ class Command(BaseCommand):
         continue_script = "y"
         counter = 1
         counter_page = 1
+        
+        not_contacted = models.InteractionStatus.objects.get(name="Not contacted")
         while continue_script.lower() == "y":
             print(f"Page {counter_page}")
             
@@ -58,10 +60,10 @@ class Command(BaseCommand):
             body = driver.find_element(By.TAG_NAME, "body")
             soup = BeautifulSoup(body.get_attribute("outerHTML"))
             
-            contacts = []
+            # contacts = []
             for link in soup.find_all('a', class_='result-link'):
                 href = urllib.parse.urlparse(link.get("href"))
-                business = Business()
+                business = models.Business()
                 username = href.path.split("/")[1]
                 if username in ("reel", "tv", "c", "p", "stories"): continue
                 business.instagram_username = username
@@ -74,6 +76,7 @@ class Command(BaseCommand):
                 
                 pattern = r'([\d,.]+K?)[ ]*Followers'
                 matches = re.search(pattern, result_snippet_text)
+                
                 if matches:
                     followers = matches.group(1)
                     if "K" in followers:
@@ -82,16 +85,15 @@ class Command(BaseCommand):
                     else:
                         number = followers.replace(",", "")
                         business.followers = int(number)
-
-                    # if business.followers < 2500:
-                    #     business.archived = True
-                    #     business.save()
-                    #     continue
                     
-                contacts.append(business)
-
-                
-            Business.objects.bulk_create(contacts, ignore_conflicts=True)
+                try:
+                    business.save()
+                    interaction = models.Interaction()
+                    interaction.status = not_contacted
+                    interaction.business = business
+                    interaction.save()
+                except Exception as e:
+                    print(e)
                 
             next_form = driver.find_element(By.CLASS_NAME, "next_form")
             next_form.submit()

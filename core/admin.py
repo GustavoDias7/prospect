@@ -27,6 +27,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from datetime import datetime
 from django.utils import timezone
+# from django.db.models import QuerySet
 
 # data, rate = sf.read("test.wav") # load audio (with shape (samples, channels))
 # meter = pyln.Meter(rate) # create BS.1770 meter
@@ -34,7 +35,7 @@ from django.utils import timezone
 import html
 from django.middleware.csrf import get_token
 
-@admin.register(models.Contact)
+# @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ["id", "facebook_page_", "phone_", "email", "website_", "instagram_"]
     actions = [actions.get_datas, actions.disqualify]
@@ -142,49 +143,69 @@ class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
             return mark_safe(html)
         else:
             return "-"
-
-# class Kanban():
     
 
-    
 @admin.register(models.Interaction)
 class InteractionAdmin(admin.ModelAdmin):
     form = forms.InteractionForm
     search_fields = ["name"]
+    autocomplete_fields = ["business"]
+    readonly_fields = ["date"]
 
 class InteractionInline(admin.StackedInline):
     model = models.Interaction
     extra = 0
+    readonly_fields = ["date"]
     
+    
+class InteractFilter(admin.SimpleListFilter):
+    title = "interaction"
+    parameter_name = "interaction"
+    
+    def lookups(self, request, model_admin):
+        return [("contacted", _("Contacted")), ("not_contacted", _("Not Contacted")), ("no_reply", _("No reply"))]
+    
+    def queryset(self, request, queryset):
+        if self.value() == "contacted":
+            id_list = models.Interaction.objects.filter(status__name="Contacted").values_list("business_id", flat=True)
+            return queryset.filter(pk__in=id_list)
+        if self.value() == "not_contacted":
+            id_list = models.Interaction.objects.filter(status__name="Not contacted").values_list("business_id", flat=True)
+            return queryset.filter(pk__in=id_list)
+        if self.value() == "no_reply":
+            id_list = models.Interaction.objects.filter(status__name="No replay").values_list("business_id", flat=True)
+            return queryset.filter(pk__in=id_list)
+
 @admin.register(models.Business)
 class BusinessAdmin(admin.ModelAdmin):
-    list_filter = ["qualified", "contacted", "archived"]
+    list_filter = ["qualified", "archived", InteractFilter]
     list_display = ["id", "instagram", "phone_", "website_", "followers_", "last_post_", "archived"]
     list_editable = ('archived',)
     actions = [
-        actions.test_chunk,
+        # actions.test_chunk,
         actions.get_instagram_data, 
         actions.disqualify, 
         actions.qualify, 
         actions.contacted, 
         actions.archive,
         actions.archive_followers,
+        actions.disqualify_old_posts,
         actions.open_link,
         actions.set_contact_quality,
         actions.check_whatsapp_websites,
-        actions.follow,
-        actions.open_selenium,
-        actions.check_search_engine,
-        actions.test_selenium_session
+        actions.set_not_contacted_interaction,
+        actions.generate_instagram_contacts
     ]
     search_fields = ["id", "instagram_username", "website", "cellphone", "telephone"]
-    autocomplete_fields = ["template", "interaction"]
+    autocomplete_fields = ["template"]
     change_form_template = 'admin/businesscontact_change_form.html'
     change_list_template = 'admin/businesscontact_change_list.html'
     filter_horizontal = ('staff_members',)
     form = forms.BusinessForm
+    inlines = [InteractionInline]
     kanban_layout = False
     kanban_columns = {
+        "desensitization": {"verbose_name": "desensitization", "max_length": None, "filter": "desensitization_filter"},
         "qualified": {"verbose_name": "qualified", "max_length": None, "filter": "qualified_filter"},
         "follow_up": {"verbose_name": "follow up", "max_length": None, "filter": "follow_up_filter"},
         "no_reply": {"verbose_name": "no reply", "max_length": None, "filter": "no_reply_filter"},
@@ -194,37 +215,42 @@ class BusinessAdmin(admin.ModelAdmin):
     }
     
     def qualified_filter(self, response):
-        qs = response.context_data['cl'].queryset
-        qs = qs.filter(qualified=True, archived=False, contacted=False)
-        qs = qs.exclude(interaction__status__name__in=("Maybe in the future", "Follow up", "No reply", "Meeting", "Finish", "Future"))
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name__in=("Not contacted", "Testing"))
+        qs = qs.order_by('-business_id')
         return qs
     
     def follow_up_filter(self, response):
-        qs = response.context_data['cl'].queryset
-        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Follow up")
-        qs = qs.order_by('interaction__follow_up_date')
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name="Follow up")
+        qs = qs.order_by('follow_up_date')
         return qs
     
     def no_reply_filter(self, response):
-        qs = response.context_data['cl'].queryset
-        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="No reply")
-        qs = qs.order_by('interaction__follow_up_date')
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name="No reply")
+        qs = qs.order_by('follow_up_date')
         return qs
     
     def maybe_in_the_future_filter(self, response):
-        qs = response.context_data['cl'].queryset
-        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Maybe in the future")
-        qs = qs.order_by('interaction__follow_up_date')
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name="Maybe in the future")
+        qs = qs.order_by('follow_up_date')
         return qs
     
     def meeting_filter(self, response):
-        qs = response.context_data['cl'].queryset
-        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Meeting")
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name="Meeting")
         return qs
     
     def finish_filter(self, response):
-        qs = response.context_data['cl'].queryset
-        qs = qs.filter(qualified=True, archived=False, interaction__isnull=False, interaction__status__name="Finish")
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name="Finish")
+        return qs
+    
+    def desensitization_filter(self, response):
+        qs = models.Interaction.objects
+        qs = qs.filter(business__archived=False, status__name="Desensitization")
         return qs
     
     def changelist_view(self, request, extra_context=None):
@@ -381,14 +407,22 @@ class BusinessAdmin(admin.ModelAdmin):
         if obj:
             if obj.name:
                 href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.name)}"
-                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">casadosdados</a>'
+                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
                 href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
                 html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
                 html3 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
                 html4 = "<a href='/' id='id_name_copy'>Copy name</a>"
-                html = " | ".join([html1, html2, html3, html4])
+                href5 = f"https://www.google.com/search?q={obj.name}"
+                html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
+                html = " | ".join([html1, html2, html5, html3, html4])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
             
+            if obj.cnpj:
+                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.cnpj)}"
+                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
+                html = " | ".join([html1])
+                help_texts["help_texts"].update({"cnpj": mark_safe(html)})
+                
             if obj.cellphone:
                 href1 = obj.get_whatsapp_link(add_message=False)
                 html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{obj.fcellphone()}</a>'
@@ -410,7 +444,12 @@ class BusinessAdmin(admin.ModelAdmin):
                 html2 = f'<a href="{href2}" target="_blank">Instagram DM</a>'
                 href3 = f"https://duckduckgo.com/?t=ffab&q={obj.instagram_username}"
                 html3 = f'<a href="{href3}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
-                html = " | ".join([html1, html2, html3])
+                href4 = f"https://pt-br.facebook.com/ads/library/?active_status=all&ad_type=all&country=BR&is_targeted_country=false&media_type=all&q={obj.instagram_username}&search_type=keyword_exact_phrase"
+                html4 = f'<a href="{href4}" target="_blank">Biblioteca de Anúncios</a>'
+                href5 = f"https://www.google.com/search?q={obj.instagram_username}"
+                html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
+                
+                html = " | ".join([html1, html2, html3, html5, html4])
                 help_texts["help_texts"].update({"instagram_username": mark_safe(html)}) 
             
             if obj.email:
@@ -510,10 +549,12 @@ class BusinessAdmin(admin.ModelAdmin):
         elif obj.followers and obj.followers < 1000:
             result = obj.followers
         
-        if obj.followers and obj.followers >= 20000:
-            style = "color: #dfff00;"
-        elif obj.followers and obj.followers >= 3000:
+        if obj.followers and obj.followers >= 50000:
+            style = "color: #fcc800;"
+        elif obj.followers and obj.followers >= 15000:
             style = "color: green;"
+        elif obj.followers and obj.followers >= 3000:
+            style = "color: #9ae600;"
         elif obj.followers and obj.followers < 3000:
             style = "color: red;"
             
@@ -804,7 +845,7 @@ class VacancyAdmin(admin.ModelAdmin):
     list_display = ["name", "job_view_", "level", "category", "company", "hiring"]
     autocomplete_fields = ["category", "company", "template", "curriculum", "level"]
     change_form_template = 'admin/vacancy_change_form.html'
-    actions = [actions.archive, actions.contacted, actions.open_selenium]
+    actions = [actions.archive, actions.contacted]
     
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
@@ -959,7 +1000,7 @@ class LinkedInContactAdmin(admin.ModelAdmin):
     list_display = ["id", "name_"]
     list_filter = ["archived"]
     search_fields = ["username"]
-    actions = [actions.get_linkedin_data, actions.archive, actions.open_selenium]
+    actions = [actions.get_linkedin_data, actions.archive]
     
     @admin.display(description='linkedin')
     def name_(self, obj):
@@ -970,26 +1011,26 @@ class LinkedInContactAdmin(admin.ModelAdmin):
         else:
             return "-"
 
-@admin.register(models.PostType)
+# @admin.register(models.PostType)
 class PostTypeAdmin(admin.ModelAdmin):
     pass
 
-@admin.register(models.Hashtag)
+# @admin.register(models.Hashtag)
 class HashtagAdmin(admin.ModelAdmin):
     class Media:
         js = ('js/admin/hashtag.js',)
 
-@admin.register(models.PostVariant)
+# @admin.register(models.PostVariant)
 class PostVariantAdmin(admin.ModelAdmin):
     change_form_template = 'admin/postvariant_change_form.html'
     class Media:
         js = ('js/admin/post_variant.js',)
         
-@admin.register(models.PostAudio)
+# @admin.register(models.PostAudio)
 class PostAudioAdmin(admin.ModelAdmin):
     pass
 
-@admin.register(models.Post)
+# @admin.register(models.Post)
 class PostAdmin(admin.ModelAdmin):
     change_form_template = 'admin/post_change_form.html'
     actions = [actions.upload_post, actions.not_posted]
@@ -1302,7 +1343,7 @@ class PostAdmin(admin.ModelAdmin):
             
         return super().response_change(request, obj)
         
-@admin.register(models.PostGenerator)
+# @admin.register(models.PostGenerator)
 class PostGeneratorAdmin(admin.ModelAdmin):
     list_display = ["id", "generated"]
     change_form_template = "admin/post_generator_change_form.html"
@@ -1361,7 +1402,7 @@ class PostGeneratorAdmin(admin.ModelAdmin):
             return HttpResponseRedirect(".")
         return super().response_change(request, obj)
 
-@admin.register(models.PostSVG)
+# @admin.register(models.PostSVG)
 class PostSVGAdmin(admin.ModelAdmin):
     
     class Media:

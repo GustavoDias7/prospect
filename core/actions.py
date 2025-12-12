@@ -1,5 +1,5 @@
 from django.contrib import admin, messages
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
@@ -123,7 +123,7 @@ def archive(modeladmin, request, queryset):
     queryset.update(archived=True)
     
     
-@admin.action(description="Archive by followers", permissions=["change"])
+@admin.action(description="Archive by less then 3k followers", permissions=["change"])
 def archive_followers(modeladmin, request, queryset: QuerySet[models.Business]):
     for query in queryset:
         if query.followers != None and query.followers < 3000:
@@ -138,12 +138,29 @@ def has_menu(modeladmin, request, queryset):
 def not_menu(modeladmin, request, queryset):
     queryset.update(menu=False)
 
-@admin.action(description="Open Selenium", permissions=["change"])
-def open_selenium(modeladmin, request, queryset):
-    # options = Options()
-    # driver = webdriver.Firefox(options=options)
-    pass
- 
+# @admin.action(description="Open Selenium", permissions=["change"])
+# def open_selenium(modeladmin, request, queryset: QuerySet[models.Business], test=321):
+#     print(test)
+
+
+@admin.action(description="Disqualify if it has old posts", permissions=["change"])
+def disqualify_old_posts(modeladmin, request, queryset: QuerySet[models.Business]):
+    for index, query in enumerate(queryset):
+        limit_datetime = timezone.now() - timedelta(days=30 * 8) # 8 months
+        if query.last_post != None and query.last_post <= limit_datetime:
+            query.qualified = False
+            query.save()
+
+@admin.action(description="Set not contacted interaction", permissions=["change"])
+def set_not_contacted_interaction(modeladmin, request, queryset: QuerySet[models.Business]):
+    not_contacted = models.InteractionStatus.objects.get(name="Not contacted")
+    
+    for index, query in enumerate(queryset):
+        interaction = models.Interaction()
+        interaction.status = not_contacted
+        interaction.business = query
+        interaction.save()
+
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business]):
     options = Options()
@@ -242,10 +259,7 @@ def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business])
         try:
             followers = None
             
-            try:
-                followers = driver.find_element(By.CSS_SELECTOR, "section > ul > li > div > a > span > span")
-            except:
-                followers = driver.find_element(By.CSS_SELECTOR, "section > ul > li > div > button > span > span")
+            followers = driver.find_element(By.CSS_SELECTOR, "section  div > a[href*='follower'] > span > span")
             
             followers_number = followers.get_attribute("title")
             if "K" in followers_number:
@@ -456,33 +470,34 @@ def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business])
                         
                     close_tab(driver=driver, index_tab=0)
         
-        # if query.followers < 3000:
-        #     query.archived = True
-        #     query.save()
-        #     continue
-        
         try:
-            posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div div > div > a")
+            posts = driver.find_elements(By.CSS_SELECTOR, "main > div > div > div > div > div> div > div > div > div > a")
             if posts and len(posts) > 0:
                 for post in posts:
                     text_post = post.get_attribute("text")
+                    print("text_post:", text_post)
+                    
                     if "Pinned" not in text_post:
                         selenium_click(driver, post, 2)
                         
                         js_last_post_element = None
                         try:
                             js_last_post_element = driver.find_element(By.CSS_SELECTOR, "a > span > time")
-                        except:
+                        except Exception as e:
                             js_last_post_element = None
+                            print(e)
                         
                         if js_last_post_element:
                             js_last_post = js_last_post_element.get_attribute("dateTime")
                             last_post = datetime.fromisoformat(js_last_post.replace("Z", "+00:00"))
                             query.last_post = last_post
-                            limit_datetime = timezone.now() - timedelta(days=30 * 8)
+                            # limit_datetime = timezone.now() - timedelta(days=30 * 8)
                             # if last_post <= limit_datetime:
                             #     query.qualified = False
                             #     print("disqualified from last post")
+                            
+                        print("js_last_post_element:", js_last_post_element)
+                        print("query.last_post:", query.last_post)
                         
                         # close post modal
                         role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
@@ -497,7 +512,9 @@ def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business])
                                 except:
                                     pass
                         
+                        print("role_buttons:", query.last_post)
                         break
+                    
                 
                 if query.qualified == None:
                     selenium_click(driver, posts[0])
@@ -1644,3 +1661,110 @@ def test_selenium_session(modeladmin, request, queryset: QuerySet[models.Busines
     
     input("Press Enter to quit browser. ")
     driver.quit()
+    
+@admin.action(description="Generate Instagram contacts", permissions=["change"])
+def generate_instagram_contacts(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
+    options = Options()
+    driver = webdriver.Firefox(options=options)
+    driver.set_window_size(652, 768 - 20)
+    driver.set_window_position(0, 0)
+
+    driver.get("https://lite.duckduckgo.com/lite/")
+    search = input("Search: ")
+    sites = [
+        "site:instagram.com", 
+        "-site:instagram.com/p/", 
+        "-site:instagram.com/reel/", 
+        "-site:instagram.com/reels/", 
+        "-site:instagram.com/stories/"
+    ]
+    query = f"{search} {' '.join(sites)}"
+    
+    pages = int(input("Pages: ")) or 10
+
+    input_query = driver.find_element(By.CLASS_NAME, "query")
+    input_query.send_keys(query)
+    input_query.send_keys(Keys.RETURN)
+    time.sleep(3)
+
+    select = Select(driver.find_element(By.CSS_SELECTOR, '.filters select'))
+    select.select_by_value('br-pt')
+    time.sleep(1)
+
+    input_query = driver.find_element(By.CLASS_NAME, "query")
+    input_query.send_keys(Keys.RETURN)
+    
+    continue_script = "y"
+    counter = 1
+    counter_page = 1
+    
+    not_contacted = models.InteractionStatus.objects.get(name="Not contacted")
+    while continue_script.lower() == "y":
+        print(f"Page {counter_page}")
+        
+        # check bot page
+        try:
+            driver.find_element(By.CSS_SELECTOR, '.anomaly-modal__title')
+            input("Bot page, press enter to continue")      
+        except:
+            pass
+        
+        body = driver.find_element(By.TAG_NAME, "body")
+        soup = BeautifulSoup(body.get_attribute("outerHTML"))
+        
+        # Find all comment nodes
+        comments = soup.find_all(text=lambda text: isinstance(text, Comment))
+
+        # Extract (remove) each comment
+        for comment in comments:
+            comment.extract()
+        
+        soup = BeautifulSoup(soup.prettify())
+        
+        # contacts = []
+        for link in soup.find_all('a', class_='result-link'):
+            href = urllib.parse.urlparse(link.get("href"))
+            business = models.Business()
+            username = href.path.split("/")[1]
+            if username in ("reel", "tv", "c", "p", "stories"): continue
+            business.instagram_username = username
+            
+            td = link.parent
+            tr = td.parent
+            tr_next = tr.next_sibling.next_sibling
+            result_snippet = tr_next.find("td", class_="result-snippet")
+            result_snippet_text = result_snippet.get_text()
+            
+            pattern = r'([\d,.]+K?)[ ]*Followers'
+            matches = re.search(pattern, result_snippet_text)
+            
+            if matches:
+                followers = matches.group(1)
+                if "K" in followers:
+                    number = followers.replace("K", "")
+                    business.followers = int(number) * 1000
+                else:
+                    number = followers.replace(",", "")
+                    business.followers = int(number)
+                
+            try:
+                business.save()
+                interaction = models.Interaction()
+                interaction.status = not_contacted
+                interaction.business = business
+                interaction.save()
+            except Exception as e:
+                print(e)
+            
+        next_form = driver.find_element(By.CLASS_NAME, "next_form")
+        next_form.submit()
+        
+        counter = counter + 1
+        counter_page = counter_page + 1
+        if counter > pages:
+            continue_script = input(f"More {pages} pages? [y/n] ")
+            counter = 1
+        else:
+            time.sleep(4)
+    
+    driver.close()

@@ -91,7 +91,8 @@ window.addEventListener("load", function () {
         const value_field = field
           .val()
           .split(" ")
-          .map((word) => {
+          .map((word, index) => {
+            if (index !== 0 && word.length <= 2) return word.toLowerCase();
             return (
               word.charAt(0).toUpperCase() + word.substring(1).toLowerCase()
             );

@@ -93,6 +93,24 @@ window.addEventListener("load", function () {
         });
       }
     }
+    function normalize_name({ button_id = "", field_id = "" }) {
+      const button = $(`#${button_id}`);
+      const field = $(`#${field_id}`);
+      button.on("click", function (event) {
+        event.preventDefault();
+        const value_field = field
+          .val()
+          .split(" ")
+          .map((word, index) => {
+            if (index !== 0 && word.length <= 2) return word.toLowerCase();
+            return (
+              word.charAt(0).toUpperCase() + word.substring(1).toLowerCase()
+            );
+          })
+          .join(" ");
+        field.val(value_field);
+      });
+    }
 
     copy_field_value({
       button_id: "copy-message",
@@ -108,7 +126,9 @@ window.addEventListener("load", function () {
     counterCharacters("id_telephone");
     counterCharacters("id_cnpj");
     counterCharacters("id_address");
-
+    counterCharacters("id_business_ref-0-observation");
+    normalize_name({ button_id: "id_name_normalize", field_id: "id_name" });
+    
     $("#changelist-form").on("submit", async function (event) {
       if ($("[value='open_link']").is(":selected")) {
         event.preventDefault();

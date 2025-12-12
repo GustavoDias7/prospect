@@ -15,25 +15,25 @@ class Command(BaseCommand):
         driver.set_window_size(652, 768 - 20)
         driver.set_window_position(0, 0)
 
-        driver.get("https://www.linkedin.com/login")
+        driver.get("https://www.linkedin.com")
         
         time.sleep(5)
         
-        form = driver.find_element(By.CLASS_NAME, "login__form")
-        username = driver.find_element(By.ID, "username")
-        password = driver.find_element(By.ID, "password")
+        # form = driver.find_element(By.CLASS_NAME, "login__form")
+        # username = driver.find_element(By.ID, "username")
+        # password = driver.find_element(By.ID, "password")
         
-        if settings.LINKEDIN_USERNAME and settings.LINKEDIN_PASSWORD:
-            if username and password and form:
-                username.send_keys(settings.LINKEDIN_USERNAME)
-                password.send_keys(settings.LINKEDIN_PASSWORD)
-                form.submit()
-            else:
-                print(form, username, password)
-                return
-        else:
-            print("Missing LinkedIn credentials")
-            return
+        # if settings.LINKEDIN_USERNAME and settings.LINKEDIN_PASSWORD:
+        #     if username and password and form:
+        #         username.send_keys(settings.LINKEDIN_USERNAME)
+        #         password.send_keys(settings.LINKEDIN_PASSWORD)
+        #         form.submit()
+        #     else:
+        #         print(form, username, password)
+        #         return
+        # else:
+        #     print("Missing LinkedIn credentials")
+        #     return
         
         time.sleep(5)
         

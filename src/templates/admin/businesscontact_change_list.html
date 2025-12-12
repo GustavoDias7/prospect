@@ -93,7 +93,7 @@
             background-color: red;
         }
         .user-icon {
-            width: 10px;
+            height: 10px;
         }
     </style>
 {% endblock %}
@@ -128,34 +128,53 @@
                     {% for obj in objects.items %}
                         <li>
                             <span>
-                                <input type="checkbox" name="_selected_action" value="{{ obj.id }}" class="action-select action-select-{{category}}" id="action-select-{{category}}-{{ obj.id }}" aria-label="Select this object for an action - ofner">
-                                [<a href="{{obj.get_admin_change_url}}">{{ obj.id }}</a>]
-                                <a href="{{obj.get_instagram_link}}" target="_blank">{{ obj.instagram_username }}</a> 
+                                <input type="checkbox" name="_selected_action" value="{{ obj.business.id }}" class="action-select action-select-{{category}}" id="action-select-{{category}}-{{ obj.business.id }}" aria-label="Select this object for an action - ofner">
+                                [<a href="{{obj.business.get_kanban_url}}">{{ obj.business.id }}</a>]
+                                <a href="{{obj.business.get_instagram_link}}" target="_blank">{{ obj.business.instagram_username }}</a> 
                                 <img 
                                 class="user-icon"
-                                src="{% if obj.staff_members.all|length > 0 %}
+                                src="{% if obj.business.staff_members.all|length > 0 %}
                                     /static/img/user-true.svg
                                 {% else %}
                                     /static/img/user-false.svg
                                 {% endif %}
                                 " 
-                                title="{% if obj.staff_members.all|length > 0 %}Staff member: true{% else %}Staff member: false{% endif %}"
+                                title="{% if obj.business.staff_members.all|length > 0 %}Staff member: true{% else %}Staff member: false{% endif %}"
                                 />
+                                {% if obj.business.cellphone %}
+                                    <img 
+                                    class="user-icon"
+                                    src="/static/img/phone-true.svg" 
+                                    title="{{obj.business.fcellphone}}"
+                                    />
+                                {% elif obj.business.telephone %}
+                                    <img 
+                                    class="user-icon"
+                                    src="/static/img/telephone-true.svg" 
+                                    title="{{obj.business.ftelephone}}"
+                                    />
+                                {% else %}
+                                    <img 
+                                    class="user-icon"
+                                    src="/static/img/phone-false.svg" 
+                                    title="No phone"
+                                    />
+                                {% endif %}
                             </span>
                             <span class="custom-results-card-status">
-                                {% if obj.interaction.status %}
+                                {% comment %} {% if obj.status %}
                                 <hr>
-                                <span>Status: {{obj.interaction.status.name}}</span>
-                                {% endif %}
+                                <span>Status: {{obj.status.name}}</span>
+                                {% endif %} {% endcomment %}
                                 </span>
-                                {% if obj.interaction.follow_up_date %}
+                                {% if obj.follow_up_date %}
                                 <hr>
                                 <span class="follow-up">
-                                    <b>[ {{obj.interaction.offset_date}} ]</b>
-                                    <span title="{{obj.interaction.follow_up_date|date:"d/m/Y H:i:s"}}">
-                                        {{obj.interaction.follow_up_date|date:"d/m H:i"}} 
+                                    <b>[ {{obj.offset_date}} ]</b>
+                                    <span title="{{obj.follow_up_date|date:"d/m/Y H:i:s"}}">
+                                        {{obj.follow_up_date|date:"d/m H:i"}} 
                                     </span>
-                                    <i class="follow-up-color {{obj.interaction.follow_up_color}}"></i>
+                                    <i class="follow-up-color {{obj.follow_up_color}}"></i>
                                 </span>
                                 {% endif %}
                             </span>

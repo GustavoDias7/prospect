@@ -149,15 +149,15 @@ class Business(models.Model):
     website2 = models.URLField(max_length=200, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
-    qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
     staff_members = models.ManyToManyField(to=StaffMember, blank=True, related_name="staff_member")
-    contacted = models.BooleanField(default=False)
-    last_post = models.DateTimeField(default=None, null=True, blank=True)
+    qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
     archived = models.BooleanField(default=False)
+    last_post = models.DateTimeField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
-    interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL, related_name="business")
+    # interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL, related_name="interaction_ref")
     followers = models.PositiveIntegerField(null=True, blank=True)
     following = models.PositiveIntegerField(null=True, blank=True)
+    # contacted = models.BooleanField(default=False)
     
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
@@ -284,6 +284,9 @@ class Business(models.Model):
             return True
         else:
             return datetime.datetime.now().date() > self.move_date.date()
+        
+    def get_kanban_url(self):
+        return reverse('admin:{}_{}_change'.format(self._meta.app_label, self._meta.model_name + "kanban"), args=[self.pk])
     
     def __str__(self):
         if self.instagram_username: return self.instagram_username
@@ -306,7 +309,7 @@ class Interaction(models.Model):
     date = models.DateTimeField(auto_now_add=True, null=True, blank=True) #first interaction
     follow_up_date = models.DateTimeField(default=None, null=True, blank=True)
     observation = models.TextField(max_length=400, null=True, blank=True)
-    # business = models.ForeignKey(Business, on_delete=models.SET_NULL, null=True, blank=True)
+    business = models.OneToOneField(Business, on_delete=models.SET_NULL, null=True, blank=True, related_name="business_ref")
     
     def offset_date(self):
         return get_time_offset(self.follow_up_date)

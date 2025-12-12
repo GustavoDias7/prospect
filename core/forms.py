@@ -5,6 +5,10 @@ class BusinessForm(forms.ModelForm):
     class Meta:
         model = models.Business
         fields = "__all__"
+        widgets = {
+            "address": forms.Textarea(attrs={"rows": 2})
+        }
+        exclude = ["following", "template", "facebook_username"]
         
     class Media:
         js = ('js/admin/instagram_contacts.js',)
