@@ -164,7 +164,7 @@ def set_not_contacted_interaction(modeladmin, request, queryset: QuerySet[models
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business]):
     options = Options()
-    profile_path = f"/home/vboxuser/.mozilla/firefox/{settings.FIREFOX_PROFILE}"
+    profile_path = f"{settings.FIREFOX_PROFILE_PATH}{settings.FIREFOX_PROFILE_NAME}"
     options.profile = str(profile_path)
     driver = webdriver.Firefox(options=options)
     driver.get("https://www.instagram.com/")
@@ -1581,7 +1581,7 @@ def help_comments(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[mode
 @admin.action(description="Get address", permissions=["change"])
 def test_selenium_session(modeladmin, request, queryset: QuerySet[models.Business]):
     # Replace this with the actual path to your saved profile
-    profile_path = f"/home/vboxuser/.mozilla/firefox/{settings.FIREFOX_PROFILE}"
+    profile_path = f"{settings.FIREFOX_PROFILE_PATH}{settings.FIREFOX_PROFILE_NAME}"
 
     options = Options()
 
@@ -1665,6 +1665,7 @@ def test_selenium_session(modeladmin, request, queryset: QuerySet[models.Busines
 @admin.action(description="Generate Instagram contacts", permissions=["change"])
 def generate_instagram_contacts(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
     options = Options()
+    options.add_argument("--headless")
     driver = webdriver.Firefox(options=options)
     driver.set_window_size(652, 768 - 20)
     driver.set_window_position(0, 0)

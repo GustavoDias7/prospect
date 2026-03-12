@@ -21,22 +21,6 @@ window.addEventListener("load", function () {
 
       return phrase;
     }
-    const emojis = ["{👏|😍|🥰|💕|💖|❤️|💙|💜|💗|✨|🌟|⭐|⚡|🔥|🔝|🎉}"];
-    const comments = [
-      "Ficou {lindo|ótimo|incrível|maravilhoso|fantástico|perfeito|impecável|show|top|massa}!",
-      "Está {lindo|incrível|maravilhoso|fantástico|perfeito|impecável}!",
-      "Está uma {lindeza|graça|fofura|beleza}!",
-      "Está um {encanto|arraso|capricho}!",
-      "Visual {lindo|incrível|maravilhoso|fantástico|perfeito|impecável}!",
-      "Simplesmente {lindo|incrível|maravilhoso|fantástico|perfeito|impecável}!",
-    ];
     
-    $(".copy_comment").on("click", function (e) {
-      const selected_comment = choice_items(comments);
-      const selected_emoji = choice_items(emojis);
-      const final_comment = selected_comment + " " + selected_emoji;
-      navigator.clipboard.writeText(final_comment);
-      alert(final_comment)
-    });
   })(django.jQuery);
 });

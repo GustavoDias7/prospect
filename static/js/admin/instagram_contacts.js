@@ -30,10 +30,11 @@ window.addEventListener("load", function () {
     function copy_field_value({
       button_id = "",
       field_id = "",
-      first_word = false,
+      first_word = false, // just copy the first word
       is_alert = false,
-      lower = false,
-      message = "",
+      lower = false, // lowercase
+      slice = null,
+      message = "", // Add message and replace {field_value} by original text
     }) {
       const button = document.getElementById(button_id);
       const field = document.getElementById(field_id);
@@ -41,19 +42,19 @@ window.addEventListener("load", function () {
         button.addEventListener("click", (event) => {
           event.preventDefault();
           let text = "";
+          
+          if (field.innerText) {
+            text = field.innerText.trim();
+          } else if (field.value) {
+            text = field.value.trim();
+          }
+
+          if (slice) {
+            text = text.slice(slice[0], slice[1]);
+          }
 
           if (first_word) {
-            if (field.innerText) {
-              text = field.innerText.trim().split(" ")[0];
-            } else if (field.value) {
-              text = field.value.trim().split(" ")[0];
-            }
-          } else {
-            if (field.innerText) {
-              text = field.innerText.trim();
-            } else if (field.value) {
-              text = field.value.trim();
-            }
+            text = text.split(" ")[0];
           }
 
           if (message) {
@@ -121,6 +122,21 @@ window.addEventListener("load", function () {
       button_id: "id_name_copy",
       field_id: "id_name",
     });
+
+    copy_field_value({
+      button_id: "id_long_distance_cell_number_copy",
+      field_id: "id_cellphone",
+      slice: [2],
+      message: "021{field_value}"
+    });
+
+    copy_field_value({
+      button_id: "id_long_distance_tel_number_copy",
+      field_id: "id_telephone",
+      slice: [2],
+      message: "021{field_value}"
+    });
+
     counterCharacters("id_name");
     counterCharacters("id_cellphone");
     counterCharacters("id_telephone");

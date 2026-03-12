@@ -205,7 +205,7 @@ class BusinessAdmin(admin.ModelAdmin):
     inlines = [InteractionInline]
     kanban_layout = False
     kanban_columns = {
-        "desensitization": {"verbose_name": "desensitization", "max_length": None, "filter": "desensitization_filter"},
+        # "desensitization": {"verbose_name": "desensitization", "max_length": None, "filter": "desensitization_filter"},
         "qualified": {"verbose_name": "qualified", "max_length": None, "filter": "qualified_filter"},
         "follow_up": {"verbose_name": "follow up", "max_length": None, "filter": "follow_up_filter"},
         "no_reply": {"verbose_name": "no reply", "max_length": None, "filter": "no_reply_filter"},
@@ -426,15 +426,21 @@ class BusinessAdmin(admin.ModelAdmin):
             if obj.cellphone:
                 href1 = obj.get_whatsapp_link(add_message=False)
                 html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{obj.fcellphone()}</a>'
-                html_ddd = f' - <span style="font-size: 14px;">{obj.get_cellphone_ddd()}</span>'
-                html = " | ".join([html1]) + html_ddd
+                html_ddd = f'<span style="font-size: 14px;">[ {obj.get_cellphone_ddd()} ] </span>'
+                html2 = "<a href='/' id='id_long_distance_cell_number_copy'>Long-distance number</a>"
+                html = " | ".join([html1, html2])
+                if obj.get_cellphone_ddd():
+                    html = f"{html_ddd}" + html
                 help_texts["help_texts"].update({"cellphone": mark_safe(html)})
                 
             if obj.telephone:
                 href1 = obj.get_whatsapp_link(add_message=False)
                 html1 = f'<a href="{href1}" style="font-size: 14px;" target="_blank">{obj.ftelephone()}</a>'
-                html_ddd = f' - <span style="font-size: 14px;">{obj.get_cellphone_ddd()}</span>'
-                html = " | ".join([html1]) + html_ddd
+                html_ddd = f'<span style="font-size: 14px;">[ {obj.get_cellphone_ddd()} ] </span>'
+                html2 = "<a href='/' id='id_long_distance_tel_number_copy'>Long-distance number</a>"
+                html = " | ".join([html1, html2])
+                if obj.get_cellphone_ddd():
+                    html = f"{html_ddd}" + html
                 help_texts["help_texts"].update({"telephone": mark_safe(html)})
                 
             if obj.instagram_username:

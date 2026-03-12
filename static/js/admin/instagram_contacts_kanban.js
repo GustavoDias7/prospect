@@ -29,10 +29,10 @@ window.addEventListener("load", function () {
     function copy_field_value({
       button_id = "",
       field_id = "",
-      first_word = false,
+      first_word = false, // just copy the first word
       is_alert = false,
-      lower = false,
-      message = "",
+      lower = false, // lowercase
+      message = "", // Add message and replace {field_value} by original text
     }) {
       const button = document.getElementById(button_id);
       const field = document.getElementById(field_id);
@@ -105,6 +105,12 @@ window.addEventListener("load", function () {
     copy_field_value({
       button_id: "copy-message",
       field_id: "rendered-template",
+    });
+
+    copy_field_value({
+      button_id: "id_long_distance_number_copy",
+      field_id: "id_cellphone",
+      message: "021{field_value}"
     });
     counterCharacters("id_cellphone");
     counterCharacters("id_telephone");
