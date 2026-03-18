@@ -34,6 +34,7 @@ from django.utils import timezone
 # loudness = meter.integrated_loudness(data) # measure loudness
 import html
 from django.middleware.csrf import get_token
+import csv
 
 # @admin.register(models.Contact)
 class ContactAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -179,8 +180,8 @@ class InteractFilter(admin.SimpleListFilter):
 @admin.register(models.Business)
 class BusinessAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "archived", InteractFilter]
-    list_display = ["id", "instagram", "phone_", "website_", "followers_", "last_post_", "archived"]
-    list_editable = ('archived',)
+    list_display = ["id", "title", "phone_", "website_", "followers_", "last_post_", "registration_status_"]
+    # list_editable = ('',)
     actions = [
         # actions.test_chunk,
         actions.get_instagram_data, 
@@ -194,9 +195,11 @@ class BusinessAdmin(admin.ModelAdmin):
         actions.set_contact_quality,
         actions.check_whatsapp_websites,
         actions.set_not_contacted_interaction,
-        actions.generate_instagram_contacts
+        actions.generate_instagram_contacts,
+        actions.consult_cnpj_api,
+        actions.update_to_flagged
     ]
-    search_fields = ["id", "instagram_username", "website", "cellphone", "telephone"]
+    search_fields = ["id", "name", "name2", "cnpj", "cep", "address", "instagram_username", "website", "cellphone", "telephone"]
     autocomplete_fields = ["template"]
     change_form_template = 'admin/businesscontact_change_form.html'
     change_list_template = 'admin/businesscontact_change_list.html'
@@ -205,14 +208,19 @@ class BusinessAdmin(admin.ModelAdmin):
     inlines = [InteractionInline]
     kanban_layout = False
     kanban_columns = {
-        # "desensitization": {"verbose_name": "desensitization", "max_length": None, "filter": "desensitization_filter"},
+        "flagged": {"verbose_name": "flagged", "max_length": None, "filter": "flagged_filter"},
         "qualified": {"verbose_name": "qualified", "max_length": None, "filter": "qualified_filter"},
         "follow_up": {"verbose_name": "follow up", "max_length": None, "filter": "follow_up_filter"},
         "no_reply": {"verbose_name": "no reply", "max_length": None, "filter": "no_reply_filter"},
-        # "maybe_in_the_future": {"verbose_name": "maybe in the future", "max_length": None, "filter": "maybe_in_the_future_filter"},
         "meeting": {"verbose_name": "meeting", "max_length": None, "filter": "meeting_filter"},
-        "finish": {"verbose_name": "finish", "max_length": None, "filter": "finish_filter"},
+        # "finish": {"verbose_name": "finish", "max_length": None, "filter": "finish_filter"},
     }
+    
+    def flagged_filter(self, response):
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=None, business__archived=False, status__name__in=("Flagged",))
+        qs = qs.order_by('-business_id')
+        return qs
     
     def qualified_filter(self, response):
         qs = models.Interaction.objects
@@ -255,6 +263,7 @@ class BusinessAdmin(admin.ModelAdmin):
     
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context=extra_context)
+
         if self.kanban_layout and hasattr(response, "context_data"):
             response.context_data['kanban_layout'] = self.kanban_layout
             response.context_data['kanban_columns'] = self.kanban_columns
@@ -262,6 +271,19 @@ class BusinessAdmin(admin.ModelAdmin):
                 filter_name = objects.get("filter")
                 filter = getattr(self, filter_name)
                 objects["items"] = filter(response)
+        
+        if request.method == "POST" and request.FILES.get("csv_file"):
+            file = request.FILES["csv_file"]
+            decoded = file.read().decode("utf-8").splitlines()
+            reader = csv.reader(decoded)
+            
+            businesses = []
+            for row in reader:
+                cnpj = row[0].strip()
+                businesses.append(models.Business(cnpj=cnpj))
+
+            models.Business.objects.bulk_create(businesses, unique_fields=["cnpj"], ignore_conflicts=True)
+
         return response 
     
     def get_list_filter(self, request):
@@ -416,11 +438,25 @@ class BusinessAdmin(admin.ModelAdmin):
                 html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
                 html = " | ".join([html1, html2, html5, html3, html4])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
+
+            if obj.name2:
+                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.name2)}"
+                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
+                href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name2}"
+                html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
+                html3 = "<a href='/' id='id_name2_normalize'>Normalize name</a>"
+                html4 = "<a href='/' id='id_name2_copy'>Copy name</a>"
+                href5 = f"https://www.google.com/search?q={obj.name2}"
+                html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
+                html = " | ".join([html1, html2, html5, html3, html4])
+                help_texts["help_texts"].update({"name2": mark_safe(html)})
             
             if obj.cnpj:
                 href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.cnpj)}"
                 html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
-                html = " | ".join([html1])
+                html2 = "<a href='/' id='id_cnpj_copy'>Copy CNPJ</a>"
+                html3 = "<a href='/' id='id_cnpj_num_copy'>Copy CNPJ numbers</a>"
+                html = " | ".join([html1, html2, html3])
                 help_texts["help_texts"].update({"cnpj": mark_safe(html)})
                 
             if obj.cellphone:
@@ -488,9 +524,14 @@ class BusinessAdmin(admin.ModelAdmin):
                 
         return super().get_form(request, obj, **kwargs)
     
-    @admin.display(description='instagram')
-    def instagram(self, obj: models.Business):
-        if obj.name:
+    @admin.display(description='title')
+    def title(self, obj: models.Business):
+        website = obj.website or obj.website2
+        if obj.name and website:
+            inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
+            html = f'<a href="{website}" target="_blank">{inner_text}</a>'
+            return mark_safe(html)
+        elif obj.name and obj.instagram_username:
             inner_text = obj.name[0:19] if len(obj.name) > 20 else obj.name
             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
@@ -498,6 +539,9 @@ class BusinessAdmin(admin.ModelAdmin):
             inner_text = obj.instagram_username
             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
+        elif obj.name:
+            short_name = obj.name[0:19] if len(obj.name) > 20 else obj.name
+            return short_name
         else:
             return "-"
         
@@ -533,16 +577,21 @@ class BusinessAdmin(admin.ModelAdmin):
         
     @admin.display(description='phone')
     def phone_(self, obj: models.Business):
-        if obj.cellphone:
+        if obj.cellphone or obj.telephone:
             href = obj.get_whatsapp_link(False)
-            inner_text = obj.fcellphone()
-            whatsapp = f'[C] <a href="{href}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-            return mark_safe(whatsapp)
-        elif obj.telephone:
-            href = obj.get_whatsapp_link(False)
-            inner_text = obj.ftelephone()
-            whatsapp = f'[T] <a href="{href}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-            return mark_safe(whatsapp)
+            inner_text = obj.fphone()
+            whatsapp = ""
+            img = ""
+
+            if len(str(obj.cellphone)) in [9, 11, 13]:
+                img = f'<img style="height: 12px; display: inline-block; margin-right: 4px;" src="/static/img/phone-true.svg"'
+            elif len(str(obj.telephone)) in [8, 10, 12]:
+                img = f'<img style="height: 12px; display: inline-block; margin-right: 4px;" src="/static/img/telephone-true.svg"'
+
+            whatsapp = f'<a href="{href}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
+
+            html = f"{img} {whatsapp}"
+            return mark_safe(html)
         else:
             return None
         
@@ -569,7 +618,18 @@ class BusinessAdmin(admin.ModelAdmin):
             return mark_safe(html)
         else:
             return result
-
+        
+    @admin.display(description='status', ordering="registration_status")
+    def registration_status_(self, obj: models.Business):
+        if obj.registration_status:
+            if obj.registration_status.lower() == "ativa":
+                html = f'<span style="color: green;">{obj.registration_status}</span>'
+                return mark_safe(html)
+            else:
+                html = f'<span style="color: yellow;">{obj.registration_status}</span>'
+                return mark_safe(html)
+        else:
+            return None
     
 @admin.register(models.BusinessKanban)
 class BusinessKanbanAdmin(BusinessAdmin):

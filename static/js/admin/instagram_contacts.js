@@ -35,6 +35,7 @@ window.addEventListener("load", function () {
       lower = false, // lowercase
       slice = null,
       message = "", // Add message and replace {field_value} by original text
+      remove_non_numeric = false,
     }) {
       const button = document.getElementById(button_id);
       const field = document.getElementById(field_id);
@@ -55,6 +56,10 @@ window.addEventListener("load", function () {
 
           if (first_word) {
             text = text.split(" ")[0];
+          }
+
+          if (remove_non_numeric) {
+            text = text.replace(/\D/g, "");
           }
 
           if (message) {
@@ -97,13 +102,15 @@ window.addEventListener("load", function () {
     function normalize_name({ button_id = "", field_id = "" }) {
       const button = $(`#${button_id}`);
       const field = $(`#${field_id}`);
+      const lower_list = ["de", "da", "do", "dos", "das", "e"]
       button.on("click", function (event) {
         event.preventDefault();
         const value_field = field
           .val()
           .split(" ")
           .map((word, index) => {
-            if (index !== 0 && word.length <= 2) return word.toLowerCase();
+            if (index !== 0 && lower_list.includes(word.toLowerCase())) return word.toLowerCase();
+            else if (word.length === 1) return word.toUpperCase();
             return (
               word.charAt(0).toUpperCase() + word.substring(1).toLowerCase()
             );
@@ -124,6 +131,22 @@ window.addEventListener("load", function () {
     });
 
     copy_field_value({
+      button_id: "id_name2_copy",
+      field_id: "id_name2",
+    });
+
+    copy_field_value({
+      button_id: "id_cnpj_copy",
+      field_id: "id_cnpj",
+    });
+
+    copy_field_value({
+      button_id: "id_cnpj_num_copy",
+      field_id: "id_cnpj",
+      remove_non_numeric: true,
+    });
+
+    copy_field_value({
       button_id: "id_long_distance_cell_number_copy",
       field_id: "id_cellphone",
       slice: [2],
@@ -138,12 +161,15 @@ window.addEventListener("load", function () {
     });
 
     counterCharacters("id_name");
+    counterCharacters("id_name2");
     counterCharacters("id_cellphone");
     counterCharacters("id_telephone");
     counterCharacters("id_cnpj");
     counterCharacters("id_address");
+    counterCharacters("id_observation");
     counterCharacters("id_business_ref-0-observation");
     normalize_name({ button_id: "id_name_normalize", field_id: "id_name" });
+    normalize_name({ button_id: "id_name2_normalize", field_id: "id_name2" });
     
     $("#changelist-form").on("submit", async function (event) {
       if ($("[value='open_link']").is(":selected")) {

@@ -9,7 +9,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of)
+from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of, remove_non_numeric)
 from prospect.constants import Colors, COMMENTS
 from . import models
 from datetime import datetime, timedelta
@@ -1769,3 +1769,95 @@ def generate_instagram_contacts(modeladmin: admin.ModelAdmin, request, queryset:
             time.sleep(4)
     
     driver.close()
+
+@admin.action(description="Consult CNPJ API", permissions=["change"])
+def consult_cnpj_api(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
+
+    for query in queryset:
+        data1 = {}
+        data2 = {}
+        cnpj = remove_non_numeric(query.cnpj)
+        url1 = f"https://api.opencnpj.org/{cnpj}"
+        res1 = requests.get(url1)
+
+        url2 = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+        res2 = requests.get(url2)
+
+        if res1.status_code == 200:
+            data1 = res1.json()
+        
+        if res2.status_code == 200:
+            data2 = res2.json()
+
+        print("status_code: ", res1.status_code, url1)
+        print("status_code: ", res2.status_code, url2)
+
+        if not (data1 and data2):
+            return
+
+        query.name = data1.get("razao_social")
+        query.name2 = data1.get("nome_fantasia")
+
+        logradouro = data1.get("logradouro")
+        numero = data1.get("numero")
+        complemento = data1.get("complemento")
+        bairro = data1.get("bairro")
+        municipio = data1.get("municipio")
+        uf = data1.get("uf")
+        address = " ".join([logradouro, numero, complemento, bairro, municipio, uf])
+
+        cep1 = data1.get("cep")
+        if cep1 and (cep1 not in (query.cep, query.cep2)):
+            if not query.cep:
+                query.cep = cep1
+                query.address = address
+            else:
+                query.cep2 = cep1
+                query.address2 = address
+
+        cep2 = data2.get("cep")
+        if cep2 and (cep2 not in (query.cep, query.cep2)):
+            if not query.cep: 
+                query.cep = cep2
+                query.address = address
+            else:
+                query.cep2 = cep2
+                query.address2 = address
+
+
+        if not (query.telephone or query.cellphone):
+            telefones = data1.get("telefones", [])
+
+            for telefone in telefones:
+                ddd = telefone.get("ddd")
+                numero = telefone.get("numero")
+                phone = f"{ddd}{numero}"
+                if (len(numero) == 8 and not query.telephone):
+                    query.telephone = f"55{phone}"
+                elif (len(numero) == 8 and not query.cellphone):
+                    query.cellphone = f"55{phone}"
+                elif (len(numero) == 9 and not query.cellphone):
+                    query.cellphone = f"55{phone}"
+                elif (len(numero) == 9 and not query.telephone):
+                    query.telephone = phone
+
+        if not query.email:
+            query.email = str(data1.get("email", "")).lower()
+
+        query.registration_status = data1.get("situacao_cadastral", "")
+        
+        query.legal_entity_type = data1.get("natureza_juridica", "")
+
+        query.save()
+
+
+@admin.action(description="Update interaction to Flagged", permissions=["change"])
+def update_to_flagged(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
+
+    flagged_interaction = models.InteractionStatus.objects.get(name="Flagged")
+    for query in queryset:
+        interaction = models.Interaction.objects.get(business=query)
+        interaction.status = flagged_interaction
+        interaction.save()
+        query.qualified = None
+        query.save()

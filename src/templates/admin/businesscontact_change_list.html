@@ -31,6 +31,12 @@
         list-style-type: none;
     }
 
+    .custom-results-card li span:first-of-type {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+    }
+
     .custom-results-card .button {
         display: block;
         padding: 4px 8px;
@@ -110,7 +116,8 @@
     }
 
     .user-icon {
-        height: 10px;
+        height: 12px;
+        font-size: 0px;
     }
 </style>
 {% endblock %}
@@ -142,15 +149,24 @@
                             class="action-select action-select-{{category}}"
                             id="action-select-{{category}}-{{ obj.business.id }}"
                             aria-label="Select this object for an action - ofner">
-                        [<a href="{{obj.business.get_kanban_url}}">{{ obj.business.id }}</a>]
-                        <a href="{{obj.business.get_instagram_link}}" target="_blank">{{ obj.business.instagram_username }}</a>
-                        <img class="user-icon" src="{% if obj.business.staff_members.all|length > 0 %}
-                                    /static/img/user-true.svg
-                                {% else %}
-                                    /static/img/user-false.svg
-                                {% endif %}
-                                "
-                            title="{% if obj.business.staff_members.all|length > 0 %}Staff member: true{% else %}Staff member: false{% endif %}" />
+                        <a href="{{obj.business.get_kanban_url}}">{{ obj.business.id }}</a> |
+                        <span title="{{obj.business.title}}">{{ obj.business.title }}</span>
+
+                        {% if obj.business.staff_members.all|length > 0 %}
+                        <img class="user-icon" src="/static/img/user-true.svg" title="Staff member: true" />
+                        {% else %}
+                        <img class="user-icon" src="/static/img/user-false.svg" title="No staff members" />
+                        {% endif %}
+
+                        {% if obj.business.instagram_username %}
+                        <a class="user-icon" href="{{obj.business.get_instagram_link}}" target="_blank">
+                            <img class="user-icon" src="/static/img/instagram-true.svg"
+                                title="@{{obj.business.instagram_username}}" />
+                        </a>
+                        {% else %}
+                        <img class="user-icon" src="/static/img/instagram-false.svg" title="No Instagram username" />
+                        {% endif %}
+
                         {% if obj.business.cellphone %}
                         <img class="user-icon" src="/static/img/phone-true.svg" title="{{obj.business.fcellphone}}" />
                         {% elif obj.business.telephone %}
@@ -159,6 +175,15 @@
                         {% else %}
                         <img class="user-icon" src="/static/img/phone-false.svg" title="No phone" />
                         {% endif %}
+
+                        {% if obj.business.registration_status|lower == "ativa" %}
+                        <img class="user-icon" src="/static/img/business-true.svg"
+                            title="{{obj.business.registration_status}}" />
+                        {% else %}
+                        <img class="user-icon" src="/static/img/business-false.svg"
+                            title="{{obj.business.registration_status}}" />
+                        {% endif %}
+
                     </span>
                     <span class="custom-results-card-status">
                         {% comment %} {% if obj.status %}
@@ -189,4 +214,10 @@
 {% else %}
 {{ block.super }}
 {% endif %}
+
+<form method="post" enctype="multipart/form-data" style="display:inline;">
+    {% csrf_token %}
+    <input type="file" name="csv_file" required>
+    <button type="submit" class="button">Import CNPJ CSV</button>
+</form>
 {% endblock %}

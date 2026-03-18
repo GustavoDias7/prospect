@@ -140,7 +140,10 @@ class StaffMemberType(models.Model):
     
 class Business(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
-    cnpj = models.CharField(max_length=18, null=True, blank=True)
+    name2 = models.CharField(max_length=50, null=True, blank=True)
+    cnpj = models.CharField(max_length=18, unique=True, null=True, blank=True)
+    registration_status = models.CharField(max_length=15, null=True, blank=True)
+    legal_entity_type = models.CharField(max_length=30, null=True, blank=True)
     instagram_username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     facebook_username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     cellphone = models.CharField(max_length=13, null=True, blank=True)
@@ -148,7 +151,10 @@ class Business(models.Model):
     website = models.URLField(max_length=200, null=True, blank=True)
     website2 = models.URLField(max_length=200, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
+    cep = models.CharField(max_length=8, null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
+    cep2 = models.CharField(max_length=8, null=True, blank=True)
+    address2 = models.CharField(max_length=200, null=True, blank=True)
     staff_members = models.ManyToManyField(to=StaffMember, blank=True, related_name="staff_member")
     qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
     archived = models.BooleanField(default=False)
@@ -158,6 +164,7 @@ class Business(models.Model):
     followers = models.PositiveIntegerField(null=True, blank=True)
     following = models.PositiveIntegerField(null=True, blank=True)
     # contacted = models.BooleanField(default=False)
+    observation = models.TextField(max_length=1000, null=True, blank=True)
     
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
@@ -228,7 +235,7 @@ class Business(models.Model):
         if self.cellphone:
             if len(self.cellphone) == 13: 
                 return f"+{self.cellphone[0:2]} ({self.cellphone[2:4]}) {self.cellphone[4]} {self.cellphone[5:9]}-{self.cellphone[9:13]}"
-            if len(self.cellphone) == 11 and int(self.cellphone[2]) == 9: 
+            elif len(self.cellphone) == 11 and int(self.cellphone[2]) == 9: 
                 return f"({self.cellphone[0:2]}) {self.cellphone[2]} {self.cellphone[3:7]}-{self.cellphone[7:11]}"
             elif len(self.cellphone) == 9 and int(self.cellphone[0]) == 9: 
                 return f"{self.cellphone[0]} {self.cellphone[1:5]}-{self.cellphone[5:9]}"
@@ -241,12 +248,32 @@ class Business(models.Model):
         if self.telephone:
             if len(self.telephone) == 12: 
                 return f"+{self.telephone[0:2]} ({self.telephone[2:4]}) {self.telephone[4:8]}-{self.telephone[8:12]}"
-            if len(self.telephone) == 10: 
+            elif len(self.telephone) == 10: 
                 return f"({self.telephone[0:2]}) {self.telephone[2:6]}-{self.telephone[6:10]}"
             elif len(self.telephone) == 8: 
                 return f"{self.telephone[0:4]}-{self.telephone[4:8]}"
             else: 
                 return self.telephone
+        else:
+            return None
+    
+    def fphone(self):
+        phone = self.cellphone or self.telephone
+        if phone:
+            if len(phone) == 12: 
+                return f"+{phone[0:2]} ({phone[2:4]}) {phone[4:8]}-{phone[8:12]}"
+            elif len(phone) == 13: 
+                return f"+{phone[0:2]} ({phone[2:4]}) {phone[4]} {phone[5:9]}-{phone[9:13]}"
+            elif len(phone) == 11 and int(phone[2]) == 9: 
+                return f"({phone[0:2]}) {phone[2]} {phone[3:7]}-{phone[7:11]}"
+            elif len(phone) == 10: 
+                return f"({phone[0:2]}) {phone[2:6]}-{phone[6:10]}"
+            elif len(phone) == 9 and int(phone[0]) == 9: 
+                return f"{phone[0]} {phone[1:5]}-{phone[5:9]}"
+            elif len(phone) == 8: 
+                return f"{phone[0:4]}-{phone[4:8]}"
+            else: 
+                return phone
         else:
             return None
         
@@ -287,6 +314,19 @@ class Business(models.Model):
         
     def get_kanban_url(self):
         return reverse('admin:{}_{}_change'.format(self._meta.app_label, self._meta.model_name + "kanban"), args=[self.pk])
+
+    def title(self):
+        website = self.website or self.website2
+        if self.name and website:
+            return self.name[0:19] if len(self.name) > 20 else self.name
+        elif self.name and self.instagram_username:
+            return self.name[0:19] if len(self.name) > 20 else self.name
+        elif self.instagram_username:
+            return f"@{self.instagram_username}"
+        elif self.name:
+            return self.name[0:19] if len(self.name) > 20 else self.name
+        else:
+            return None
     
     def __str__(self):
         if self.instagram_username: return self.instagram_username
@@ -308,7 +348,7 @@ class Interaction(models.Model):
     contact_via = models.ForeignKey("InteractionContactVia", on_delete=models.SET_NULL, null=True, blank=True)
     date = models.DateTimeField(auto_now_add=True, null=True, blank=True) #first interaction
     follow_up_date = models.DateTimeField(default=None, null=True, blank=True)
-    observation = models.TextField(max_length=400, null=True, blank=True)
+    observation = models.TextField(max_length=1000, null=True, blank=True)
     business = models.OneToOneField(Business, on_delete=models.SET_NULL, null=True, blank=True, related_name="business_ref")
     
     def offset_date(self):
