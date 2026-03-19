@@ -203,6 +203,14 @@ window.addEventListener("load", function () {
       });
     });
 
+    $('#open-phone-number').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
+      selectedOptions.each(function () {
+        window.open(`/admin/core/phonenumber/${$(this).val()}/change/`, '_blank');
+      });
+    });
+
     const images = document.querySelectorAll(".business_contact_image");
     images.forEach((image) => {
       image.addEventListener("click", (e) => {

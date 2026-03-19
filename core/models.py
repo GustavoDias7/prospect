@@ -165,6 +165,11 @@ class Business(models.Model):
     following = models.PositiveIntegerField(null=True, blank=True)
     # contacted = models.BooleanField(default=False)
     observation = models.TextField(max_length=1000, null=True, blank=True)
+    phone_numbers = models.ManyToManyField(
+        "PhoneNumber",
+        blank=True,
+        related_name="phone_number"
+    )
     
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
@@ -400,6 +405,37 @@ class Website(models.Model):
     bitly = models.BooleanField(default=False)
     social_media = models.BooleanField(default=False)
     ignore = models.BooleanField(default=False)
+
+class PhoneNumber(models.Model):
+    # Core fields
+    country_code = models.CharField(max_length=5, default="55")   # e.g. "55"
+    ddd = models.CharField(max_length=2)            # e.g. "21"
+    number = models.CharField(max_length=9)        # e.g. "987654321"
+
+    # WhatsApp status
+    is_whatsapp_active = models.BooleanField(null=True, blank=True)
+    last_whatsapp_check = models.DateTimeField(null=True, blank=True)
+
+    # Metadata
+    last_call_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    observation = models.TextField(max_length=1000, null=True, blank=True)
+
+    def get_full_number(self):
+        return f"{self.country_code}{self.ddd}{self.number}"
+    
+    def fget_full_number(self):
+        uf = DDD.get(self.ddd)
+        if len(self.number) == 9:
+            formatted_number = f"{self.number[0]} {self.number[1:5]}-{self.number[5:9]}"
+            return f"[{uf}] +{self.country_code} ({self.ddd}) {formatted_number}"
+        elif len(self.number) == 8:
+            formatted_number = f"{self.number[0:4]}-{self.number[4:8]}"
+            return f"[{uf}] +{self.country_code} ({self.ddd}) {formatted_number}"
+        
+    def __str__(self):
+        return self.fget_full_number()
 
 class VacancyCategory(models.Model):
     name = models.CharField(max_length=50)

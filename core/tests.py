@@ -1,5 +1,5 @@
 from django.test import TestCase
-from prospect.utils import has_string_in_list
+from prospect.utils import has_string_in_list, parse_phone
 from PIL import Image, ImageFont, ImageDraw
 from io import BytesIO
 import requests
@@ -92,3 +92,53 @@ class TestPILTextWrap(TestCase):
         print(main_text.size)
         img_background.paste(main_text, (0, 0))
         self.assertTrue(main_text.size[0] <= main_text_width)
+
+
+class PhoneParserTest(TestCase):
+
+    def test_valid_mobile_with_ddd(self):
+        phone_number = "21987654321"
+        result = parse_phone(phone_number)
+        print("before:", phone_number)
+        print("after:", result)
+        self.assertEqual(result, {
+            "country_code": "55",
+            "ddd": "21",
+            "number": "987654321"
+        })
+
+    def test_valid_mobile_without_ddd(self):
+        phone_number = "987654321"
+        result = parse_phone(phone_number)
+        print("before:", phone_number)
+        print("after:", result)
+        self.assertEqual(result, {
+            "country_code": "55",
+            "ddd": "",
+            "number": "987654321"
+        })
+
+    def test_with_symbols(self):
+        phone_number = "(21) 98765-4321"
+        result = parse_phone(phone_number)
+        print("before:", phone_number)
+        print("after:", result)
+
+        self.assertEqual(result["ddd"], "21")
+        self.assertEqual(result["number"], "987654321")
+
+    def test_invalid_short_number(self):
+        phone_number = "123"
+        result = parse_phone(phone_number)
+        print("before:", phone_number)
+        print("after:", result)
+
+        self.assertIsNone(result)
+
+    def test_with_country_code(self):
+        phone_number = "+55 21 98765-4321"
+        result = parse_phone(phone_number)
+        print("before:", phone_number)
+        print("after:", result)
+
+        self.assertEqual(result["ddd"], "21")

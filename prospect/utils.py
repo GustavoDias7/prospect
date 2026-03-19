@@ -641,3 +641,35 @@ def get_time_offset(my_datetime: datetime):
             
     return result
 
+def parse_phone(phone_number: str):
+    if not phone_number:
+        return None
+
+    digits = re.sub(r'\D', '', phone_number)
+
+    if len(digits) < 8:
+        return None
+
+    country_code = "55"
+    ddd = ""
+    number = ""
+
+    if len(digits) in [8, 9]:
+        number = digits
+
+    elif len(digits) in [10, 11]:
+        ddd = digits[:2]
+        number = digits[2:]
+
+    elif len(digits) in [12, 13] and digits.startswith("55"):
+        ddd = digits[2:4]
+        number = digits[4:]
+
+    else:
+        return None
+
+    return {
+        "country_code": country_code,
+        "ddd": ddd,
+        "number": number,
+    }

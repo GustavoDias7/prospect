@@ -203,7 +203,7 @@ class BusinessAdmin(admin.ModelAdmin):
     autocomplete_fields = ["template"]
     change_form_template = 'admin/businesscontact_change_form.html'
     change_list_template = 'admin/businesscontact_change_list.html'
-    filter_horizontal = ('staff_members',)
+    filter_horizontal = ('staff_members', 'phone_numbers')
     form = forms.BusinessForm
     inlines = [InteractionInline]
     kanban_layout = False
@@ -515,6 +515,14 @@ class BusinessAdmin(admin.ModelAdmin):
                 html1 = f'<button id="{id}" style="{style}">{inner_text}</button>'
                 html = " | ".join([html1])
                 help_texts["help_texts"].update({"staff_members": mark_safe(html)})
+
+            if obj.phone_numbers:
+                inner_text = "Open Phone Number"
+                style = "display: block; margin: 0px auto 8px;"
+                id = "open-phone-number"
+                html1 = f'<button id="{id}" style="{style}">{inner_text}</button>'
+                html = " | ".join([html1])
+                help_texts["help_texts"].update({"phone_numbers": mark_safe(html)})
                 
             if obj.last_post:
                 help_text = get_time_offset(obj.last_post)
@@ -897,6 +905,10 @@ class InteractionStatusAdmin(admin.ModelAdmin):
 @admin.register(models.InteractionContactVia)
 class InteractionContactViaAdmin(admin.ModelAdmin):
     pass
+
+@admin.register(models.PhoneNumber)
+class PhoneNumberAdmin(admin.ModelAdmin):
+    search_fields = ["id", "ddd", "country_code", "number"]
 
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):
