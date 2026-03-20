@@ -9,7 +9,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of, remove_non_numeric)
+from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of, remove_non_numeric, parse_phone)
 from prospect.constants import Colors, COMMENTS
 from . import models
 from datetime import datetime, timedelta
@@ -19,6 +19,11 @@ from prospect import regex
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 from selenium.webdriver.support.ui import Select
 from django.db.models import QuerySet
+import os
+import cv2
+from tkinter import Tk, Label
+from PIL import Image, ImageTk
+from django.db import IntegrityError
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -1861,3 +1866,163 @@ def update_to_flagged(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[
         interaction.save()
         query.qualified = None
         query.save()
+
+@admin.action(description="Check WhatsApp and generate number", permissions=["change"])
+def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
+    options = Options()
+    options.add_argument("--headless")
+    profile_path = os.path.join(
+        settings.FIREFOX_PROFILE_PATH,
+        settings.FIREFOX_PROFILE_NAME
+    )
+    options.profile = profile_path
+    driver = webdriver.Firefox(options=options)
+
+    def get_path(name) -> dict:
+        screenshot_temp_path = "temp"
+        file_ext = ".png"
+        filename = f"{name}{file_ext}"
+        path = os.path.join(screenshot_temp_path, filename)
+        return path
+    
+    def open_image(name: str) -> Tk: 
+        root = Tk()
+        root.geometry("800x800+0+0")
+        path = get_path(name)
+        driver.save_screenshot(path)
+        img = Image.open(path)
+        img = ImageTk.PhotoImage(img)
+        label = Label(root, image=img)
+        label.pack()
+        root.update()
+        return root
+    
+    for index, query in enumerate(queryset):
+        print("="*50)
+        print(f"[{query.pk}] {index + 1} of {len(queryset)}")
+        for index2, phone_number in enumerate(query.phone_numbers.all()):
+            if index2 != 0: print("-"*50)
+            print("phone_number.id:", phone_number.id)
+            print(phone_number.get_whatsapp_link())
+            print("phone_number:", phone_number)
+            driver.get(phone_number.get_whatsapp_link())
+            root = open_image("whatsapp_initial_screen")
+
+            time.sleep(5)
+
+            root.destroy()
+            root = open_image("whatsapp_initial_screen")
+
+            time.sleep(5)
+            
+
+            body = driver.find_element(By.TAG_NAME, "body")
+            body_html = body.get_attribute("innerHTML")
+
+            if "Scan to log in" in body_html:
+                print("No login!")
+                root.destroy()
+            else:
+                time.sleep(1) # sleep_initial=1,
+
+                root.destroy()
+
+                def check_whatsapp():
+                    result = False
+                    root = open_image("whatsapp_access_chat")
+
+                    time.sleep(5)
+
+                    if "não está no WhatsApp." in body_html:
+                        print("Not registered!")
+                        phone_number.is_whatsapp_active = False
+                        phone_number.last_whatsapp_check = timezone.now()
+                        phone_number.save()
+                        result = True
+                    terms = ("Profile details", "Dados do perfil")
+                    if has_string_in_list(terms, [body_html]):
+                        print("Registered!")
+
+                        chat = driver.find_element(By.CSS_SELECTOR, "div#main > header > div:first-of-type")
+                        chat_html = chat.get_attribute("textContent")
+                        print("chat_html:", chat_html)
+                        wp_number = get_phone(chat_html)
+                        print("wp_number:", wp_number)
+                        if wp_number:
+                            print("phone_number.is_landline():", phone_number.is_landline())
+                            print("is_cellphone(wp_number):", is_cellphone(wp_number))
+                            if phone_number.is_landline() and is_cellphone(wp_number):
+                                parsed_phone = parse_phone(wp_number)
+                                print("parsed_phone:", parsed_phone)
+                                # generate mobile phone
+                                try:
+                                    derivered_number = models.PhoneNumber()
+                                    derivered_number.country_code = parsed_phone.get("country_code")
+                                    derivered_number.ddd = parsed_phone.get("ddd")
+                                    derivered_number.number = parsed_phone.get("number")
+                                    derivered_number.is_generated = True
+                                    derivered_number.generation_type = "whatsapp_selenium_auto_checking"
+                                    derivered_number.is_whatsapp_active = True
+                                    derivered_number.last_whatsapp_check = timezone.now()
+                                    derivered_number.derived_from = phone_number
+                                    derivered_number.save()
+                                    print("derivered_number:", derivered_number)
+                                    query.phone_numbers.add(derivered_number)
+                                    query.save()
+                                    phone_number.is_whatsapp_active = False
+                                    phone_number.last_whatsapp_check = timezone.now()
+                                    phone_number.save()
+                                except IntegrityError as e: # alwady exist
+                                    print(e)
+                                    print(parsed_phone, wp_number, phone_number)
+
+                                    country_code = parsed_phone.get("country_code")
+                                    ddd = parsed_phone.get("ddd")
+                                    number = parsed_phone.get("number")
+                                    derivered_number = models.PhoneNumber.objects.get(
+                                        country_code=country_code,
+                                        ddd=ddd,
+                                        number=number
+                                    )
+                                    derivered_number.is_whatsapp_active = True
+                                    derivered_number.last_whatsapp_check = timezone.now()
+                                    derivered_number.save()
+
+                                    phone_number.is_whatsapp_active = False
+                                    phone_number.last_whatsapp_check = timezone.now()
+                                    phone_number.save()
+
+                                    print("derivered_number:", derivered_number)
+                                    print("phone_number:", phone_number)
+                                except Exception as e:
+                                    print(e)
+                                    print(parsed_phone, wp_number, phone_number)
+                            
+                            # if start with mobile phone number and not landline
+                            elif phone_number.is_mobile() and is_cellphone(wp_number):
+                                print("phone_number.is_mobile():", phone_number.is_mobile())
+                                print("phone_number:", phone_number)
+                                
+                                phone_number.is_whatsapp_active = True
+                                phone_number.last_whatsapp_check = timezone.now()
+                                phone_number.save()
+                                print("phone_number:", phone_number)
+                            elif phone_number.is_landline() and is_telephone(wp_number):
+                                phone_number.is_whatsapp_active = True
+                                phone_number.last_whatsapp_check = timezone.now()
+                                phone_number.save()
+                                print("phone_number:", phone_number)
+
+                        result = True
+                    
+                    root.destroy()
+                    return result
+
+                try_while(
+                    callback=check_whatsapp,
+                    sleep_before=10,
+                    times=3
+                )
+
+    driver.close()
+    

@@ -13,6 +13,7 @@ import numpy as np
 from moviepy.decorators import audio_video_fx
 from datetime import datetime, timedelta, timezone
 from django.utils.translation import gettext_lazy as _
+import cv2
 
 @audio_video_fx
 def audio_normalize(clip: AudioFileClip):
@@ -45,7 +46,7 @@ def fphone_number(number: str) -> str:
         return ""
 
 
-def get_phone(value: str):
+def get_phone(value: str) -> str:
     phone = ""
     
     phones = [
@@ -641,7 +642,7 @@ def get_time_offset(my_datetime: datetime):
             
     return result
 
-def parse_phone(phone_number: str):
+def parse_phone(phone_number: str) -> dict:
     if not phone_number:
         return None
 
@@ -673,3 +674,10 @@ def parse_phone(phone_number: str):
         "ddd": ddd,
         "number": number,
     }
+
+def show_image(path):
+    img = cv2.imread(path)
+    cv2.imshow("Preview", img)
+    cv2.moveWindow("Preview", 0, 0)
+    cv2.waitKey(1)  # waits until you press a key
+    cv2.destroyAllWindows()

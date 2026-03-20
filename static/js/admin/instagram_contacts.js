@@ -211,6 +211,57 @@ window.addEventListener("load", function () {
       });
     });
 
+    $('#open-phone-number-whatsapp').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
+      selectedOptions.each(function () {
+        phone_number = $(this).text();
+        phone_number = phone_number.replace(/\D/g, "");
+        whatsapp_link = `https://web.whatsapp.com/send/?phone=${phone_number}`
+        window.open(whatsapp_link, '_blank');
+      });
+    });
+
+    $('#copy-phone-number-ddd').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
+      selectedOptions.each(function () {
+        
+        phone_number = $(this).text();
+        console.log(phone_number);
+        phone_number = phone_number.replace(/\D/g, "");
+        phone_number = `${phone_number}`;
+        navigator.clipboard.writeText(phone_number);
+      });
+    });
+
+    $('#copy-phone-number-no-ddd').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
+      selectedOptions.each(function () {
+        
+        phone_number = $(this).text();
+        console.log(phone_number);
+        phone_number = phone_number.replace(/\D/g, "");
+        phone_number = phone_number.slice(2);
+        phone_number = `${phone_number}`;
+        navigator.clipboard.writeText(phone_number);
+      });
+    });
+
+    $('#copy-phone-number-long').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
+      selectedOptions.each(function () {
+        
+        phone_number = $(this).text();
+        console.log(phone_number);
+        phone_number = phone_number.replace(/\D/g, "");
+        phone_number = `021${phone_number}`;
+        navigator.clipboard.writeText(phone_number);
+      });
+    });
+
     const images = document.querySelectorAll(".business_contact_image");
     images.forEach((image) => {
       image.addEventListener("click", (e) => {

@@ -179,25 +179,25 @@ class InteractFilter(admin.SimpleListFilter):
 
 @admin.register(models.Business)
 class BusinessAdmin(admin.ModelAdmin):
-    list_filter = ["qualified", "archived", InteractFilter]
-    list_display = ["id", "title", "phone_", "website_", "followers_", "last_post_", "registration_status_"]
+    list_filter = ["qualified", "archived", "registration_status", InteractFilter]
+    list_display = ["id", "title", "phone_numbers_", "website_", "followers_", "last_post_", "registration_status_"]
     # list_editable = ('',)
     actions = [
-        # actions.test_chunk,
         actions.get_instagram_data, 
         actions.disqualify, 
         actions.qualify, 
         actions.contacted, 
         actions.archive,
-        actions.archive_followers,
-        actions.disqualify_old_posts,
-        actions.open_link,
-        actions.set_contact_quality,
-        actions.check_whatsapp_websites,
+        # actions.archive_followers,
+        # actions.disqualify_old_posts,
+        # actions.open_link,
+        # actions.set_contact_quality,
+        # actions.check_whatsapp_websites,
         actions.set_not_contacted_interaction,
         actions.generate_instagram_contacts,
         actions.consult_cnpj_api,
-        actions.update_to_flagged
+        actions.update_to_flagged,
+        actions.whatsapp_checker,
     ]
     search_fields = ["id", "name", "name2", "cnpj", "cep", "address", "instagram_username", "website", "cellphone", "telephone"]
     autocomplete_fields = ["template"]
@@ -452,7 +452,7 @@ class BusinessAdmin(admin.ModelAdmin):
                 help_texts["help_texts"].update({"name2": mark_safe(html)})
             
             if obj.cnpj:
-                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.cnpj)}"
+                href1 = f"https://casadosdados.com.br/solucao/cnpj/{obj.get_cnpj()}"
                 html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
                 html2 = "<a href='/' id='id_cnpj_copy'>Copy CNPJ</a>"
                 html3 = "<a href='/' id='id_cnpj_num_copy'>Copy CNPJ numbers</a>"
@@ -517,12 +517,26 @@ class BusinessAdmin(admin.ModelAdmin):
                 help_texts["help_texts"].update({"staff_members": mark_safe(html)})
 
             if obj.phone_numbers:
-                inner_text = "Open Phone Number"
-                style = "display: block; margin: 0px auto 8px;"
-                id = "open-phone-number"
-                html1 = f'<button id="{id}" style="{style}">{inner_text}</button>'
-                html = " | ".join([html1])
-                help_texts["help_texts"].update({"phone_numbers": mark_safe(html)})
+                inner_text1 = "Open Phone Number"
+                inner_text2 = "Open WhatsApp Number"
+                inner_text3 = "Copy Long-distance number"
+                inner_text4 = "Copy number with DDD"
+                inner_text5 = "Copy number no DDD"
+                # style = "display: block; margin: 0px auto 8px;"
+                style_wrapper = "display: flex; gap: 16px; align-items: center; justify-content: center;"
+                id1 = "open-phone-number"
+                id2 = "open-phone-number-whatsapp"
+                id3 = "copy-phone-number-long"
+                id4 = "copy-phone-number-ddd"
+                id5 = "copy-phone-number-no-ddd"
+                html1 = f'<button id="{id1}">{inner_text1}</button>'
+                html2 = f'<button id="{id2}">{inner_text2}</button>'
+                html3 = f'<button id="{id3}">{inner_text3}</button>'
+                html4 = f'<button id="{id4}">{inner_text4}</button>'
+                html5 = f'<button id="{id5}">{inner_text5}</button>'
+                html = " ".join([html1, html2, html3, html4, html5])
+                html_wrapper = f'<div  style="{style_wrapper}">{html}</div>'
+                help_texts["help_texts"].update({"phone_numbers": mark_safe(html_wrapper)})
                 
             if obj.last_post:
                 help_text = get_time_offset(obj.last_post)
@@ -599,6 +613,19 @@ class BusinessAdmin(admin.ModelAdmin):
             whatsapp = f'<a href="{href}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
 
             html = f"{img} {whatsapp}"
+            return mark_safe(html)
+        else:
+            return None
+    
+    
+    @admin.display(description='phone')
+    def phone_numbers_(self, obj: models.Business):
+        phone_numbers = obj.phone_numbers.all()
+        if len(phone_numbers) > 0:
+            html_items = []
+            for phone_number in phone_numbers:
+                html_items.append(f"<span>{phone_number.fget_full_number_whatsapp()}</span>")
+            html = "<br>".join(html_items)
             return mark_safe(html)
         else:
             return None
@@ -909,6 +936,7 @@ class InteractionContactViaAdmin(admin.ModelAdmin):
 @admin.register(models.PhoneNumber)
 class PhoneNumberAdmin(admin.ModelAdmin):
     search_fields = ["id", "ddd", "country_code", "number"]
+    autocomplete_fields = ["derived_from"]
 
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):

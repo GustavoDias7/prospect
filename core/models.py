@@ -148,6 +148,11 @@ class Business(models.Model):
     facebook_username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     cellphone = models.CharField(max_length=13, null=True, blank=True)
     telephone = models.CharField(max_length=12, null=True, blank=True)
+    phone_numbers = models.ManyToManyField(
+        "PhoneNumber",
+        blank=True,
+        related_name="phone_number"
+    )
     website = models.URLField(max_length=200, null=True, blank=True)
     website2 = models.URLField(max_length=200, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
@@ -165,12 +170,10 @@ class Business(models.Model):
     following = models.PositiveIntegerField(null=True, blank=True)
     # contacted = models.BooleanField(default=False)
     observation = models.TextField(max_length=1000, null=True, blank=True)
-    phone_numbers = models.ManyToManyField(
-        "PhoneNumber",
-        blank=True,
-        related_name="phone_number"
-    )
     
+    def get_cnpj(self):
+        return remove_non_numeric(self.cnpj)
+
     def get_admin_change_url(self):
         return reverse(f'admin:{self._meta.app_label}_{self._meta.model_name}_change', args=[self.pk])
     
@@ -420,22 +423,89 @@ class PhoneNumber(models.Model):
     last_call_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    is_generated = models.BooleanField(default=False)
+    generation_type = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True
+    )
+
+    derived_from = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="variants"
+    )
+
     observation = models.TextField(max_length=1000, null=True, blank=True)
 
-    def get_full_number(self):
-        return f"{self.country_code}{self.ddd}{self.number}"
+    class Meta:
+        unique_together = ("country_code", "ddd", "number")
+
+    def __setattr__(self, name, value):
+        return super().__setattr__(name, value)
+
+    def is_landline(self) -> bool:
+        return len(self.number) == 8
+
+    def is_mobile(self) -> bool:
+        return len(self.number) == 9
     
+    # check if the last 8 digits (landline part) are equal
+    # even compare landline and mobile numbers
+    def is_landline_part_equal(self, sec_number: str) -> bool:
+        if len(sec_number) >= 8:
+            return self.number[-8:] == sec_number[-8:]
+        else:
+            return False
+
+    def get_landline_full_number(self) -> str | None:
+        if self.number:
+            if self.is_landline():
+                if not self.ddd:
+                    return self.number
+                else:
+                    return f"{self.country_code}{self.ddd}{self.number}"
+            else:
+                if not self.ddd:
+                    return self.number[:1]
+                else:
+                    return f"{self.country_code}{self.ddd}{self.number[:1]}"
+        else:
+            return None
+
+    def get_full_number(self):
+        if not self.ddd:
+            return self.number
+        else:
+            return f"{self.country_code}{self.ddd}{self.number}"
+
     def fget_full_number(self):
         uf = DDD.get(self.ddd)
         if len(self.number) == 9:
             formatted_number = f"{self.number[0]} {self.number[1:5]}-{self.number[5:9]}"
-            return f"[{uf}] +{self.country_code} ({self.ddd}) {formatted_number}"
+            return f"{uf} ({self.ddd}) {formatted_number}"
         elif len(self.number) == 8:
             formatted_number = f"{self.number[0:4]}-{self.number[4:8]}"
-            return f"[{uf}] +{self.country_code} ({self.ddd}) {formatted_number}"
+            return f"{uf} ({self.ddd}) {formatted_number}"
+    
+    def fget_full_number_whatsapp(self):
+        wp_status = ""
+        if self.is_whatsapp_active == True:
+            wp_status = "🟢"
+        elif self.is_whatsapp_active == False:
+            wp_status = "🔴"
+        elif self.is_whatsapp_active == None:
+            wp_status = "⚫"
+
+        return f"{self.fget_full_number()} {wp_status}"
+        
+    def get_whatsapp_link(self):
+        return f"https://web.whatsapp.com/send/?phone={self.get_full_number()}"
         
     def __str__(self):
-        return self.fget_full_number()
+        return self.fget_full_number_whatsapp()
 
 class VacancyCategory(models.Model):
     name = models.CharField(max_length=50)
