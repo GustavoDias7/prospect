@@ -1,5 +1,6 @@
 import re
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 import time
 from PIL import Image, ImageFont, ImageDraw
@@ -14,6 +15,7 @@ from moviepy.decorators import audio_video_fx
 from datetime import datetime, timedelta, timezone
 from django.utils.translation import gettext_lazy as _
 import cv2
+import urllib.parse
 
 @audio_video_fx
 def audio_normalize(clip: AudioFileClip):
@@ -189,10 +191,6 @@ def open_tab(driver: webdriver.Firefox, search: str, index_tab: int, sleep: int 
 def close_tab(driver: webdriver.Firefox, index_tab: int):
     driver.close()
     driver.switch_to.window(driver.window_handles[index_tab])
-    
-def selenium_click(driver: webdriver.Firefox, element: WebElement, sleep: int | None = None):
-    driver.execute_script("arguments[0].click();", element)
-    if type(sleep) == int: time.sleep(sleep)
 
 # times = 1
 def try_while(
@@ -681,3 +679,83 @@ def show_image(path):
     cv2.moveWindow("Preview", 0, 0)
     cv2.waitKey(1)  # waits until you press a key
     cv2.destroyAllWindows()
+
+# selenium utils
+
+def selenium_click(driver: webdriver.Firefox, element: WebElement, sleep: int | None = None):
+    driver.execute_script("arguments[0].click();", element)
+    if type(sleep) == int: time.sleep(sleep)
+
+def open_whatsapp_sidebar(driver: webdriver.Firefox) -> webdriver.Firefox:
+    try:
+        # open chat sidebar "Profile details" 
+        role_buttons = driver.find_elements(By.CSS_SELECTOR, "[role='button']")
+        if role_buttons and len(role_buttons) >= 1:
+            for role_button in role_buttons:
+                title_attr = role_button.get_attribute("title")
+                terms = ("Profile details", "Dados do perfil")
+                if has_string_in_list(title_attr, terms):
+                    driver.execute_script("arguments[0].click();", role_button)
+                    break
+    except Exception as e:
+        print(e)
+        print("open_whatsapp_sidebar")
+    
+    return driver
+
+def get_whatsapp_sidebar_data(driver: webdriver.Firefox) -> dict:
+    result = {'urls': [], 'emails': [], 'address': None}
+    
+    try:
+        # get urls and emails from sidebar
+        links = driver.find_elements(By.CSS_SELECTOR, "section a")
+        if links and len(links) >= 1:
+            for link in links:
+                url = link.get_attribute("href")
+
+                if "maps.google.com" in url:
+                    result["address"] = url
+                elif "http" in url:
+                    result["urls"].append(url)
+                elif "mailto" in url:
+                    email = url.replace("mailto:", "")
+                    result["emails"].append(email)
+    except Exception as e:
+        print(e)
+        print("get_whatsapp_sidebar_data")
+
+    return result
+
+def extract_social_usernames(text: str):
+    data = {
+        "linkedin": [],
+        "instagram": [],
+        "facebook": []
+    }
+
+    # LinkedIn
+    linkedin_pattern = r'(?:https?://)?(?:[\w]+\.)?linkedin\.com/company/([\w\-\.]+)'
+    
+    # Instagram
+    instagram_pattern = r'(?:https?://)?(?:www\.)?instagram\.com/([\w\._]+)'
+    
+    # Facebook
+    facebook_pattern = r'(?:https?://)?(?:www\.)?facebook\.com/([\w\.]+)'
+
+    ig_blacklist = {'p', 'reel', 'stories', 'explore', 'accounts', 'tv'}
+    fb_blacklist = {'pages', 'groups', 'events', 'marketplace', 'watch', 'login', 'share'}
+
+    # Extract
+    data["linkedin"] = list(set(re.findall(linkedin_pattern, text)))
+
+    data["instagram"] = list({
+        u for u in re.findall(instagram_pattern, text)
+        if u.lower() not in ig_blacklist
+    })
+
+    data["facebook"] = list({
+        u for u in re.findall(facebook_pattern, text)
+        if u.lower() not in fb_blacklist
+    })
+
+    return data

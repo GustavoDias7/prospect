@@ -31,10 +31,26 @@
         list-style-type: none;
     }
 
+    .custom-results-card li.top {
+        border-width: 3px;
+        border-color: var(--header-bg);
+    }
+
     .custom-results-card li span:first-of-type {
         display: flex;
         gap: 4px;
         align-items: center;
+    }
+
+    .custom-results-card li span h3 {
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: normal;
+        padding: 0;
+        margin: 0;
+        max-width: 220px;
+        text-overflow: ellipsis;
+        overflow-x: hidden;
     }
 
     .custom-results-card .button {
@@ -143,19 +159,19 @@
             </h2>
             <ul class="custom-results-card" id="custom-results-card-{{category}}">
                 {% for obj in objects.items %}
-                <li>
+                <li class="{% if obj.business.top %}top{% endif %}">
                     <span>
                         <input type="checkbox" name="_selected_action" value="{{ obj.business.id }}"
                             class="action-select action-select-{{category}}"
                             id="action-select-{{category}}-{{ obj.business.id }}"
                             aria-label="Select this object for an action - ofner">
                         <a href="{{obj.business.get_kanban_url}}">{{ obj.business.id }}</a> |
-                        <span title="{{obj.business.title}}">{{ obj.business.title }}</span>
 
                         {% if obj.business.staff_members.all|length > 0 %}
-                        <img class="user-icon" src="/static/img/user-true.svg" title="Staff member: true" />
+                        <img class="user-icon" src="/static/img/user-true.svg"
+                            title="{{obj.business.get_staff_members}}" />
                         {% else %}
-                        <img class="user-icon" src="/static/img/user-false.svg" title="No staff members" />
+                        <img class="user-icon" src="/static/img/user-false.svg" title="No staff member" />
                         {% endif %}
 
                         {% if obj.business.instagram_username %}
@@ -167,17 +183,18 @@
                         <img class="user-icon" src="/static/img/instagram-false.svg" title="No Instagram username" />
                         {% endif %}
 
-                        {% if obj.business.cellphone %}
-                        <img class="user-icon" src="/static/img/phone-true.svg" title="{{obj.business.fcellphone}}" />
-                        {% elif obj.business.telephone %}
-                        <img class="user-icon" src="/static/img/telephone-true.svg"
-                            title="{{obj.business.ftelephone}}" />
+                        {% if obj.business.phone_numbers.all|length > 0 %}
+                        <img class="user-icon" src="/static/img/phone-true.svg"
+                            title="{{obj.business.get_phone_numbers}}" />
                         {% else %}
-                        <img class="user-icon" src="/static/img/phone-false.svg" title="No phone" />
+                        <img class="user-icon" src="/static/img/phone-false.svg" title="No phone number" />
                         {% endif %}
 
                         {% if obj.business.registration_status|lower == "ativa" %}
                         <img class="user-icon" src="/static/img/business-true.svg"
+                            title="{{obj.business.registration_status}}" />
+                        {% elif obj.business.registration_status == None %}
+                        <img class="user-icon" src="/static/img/business-null.svg"
                             title="{{obj.business.registration_status}}" />
                         {% else %}
                         <img class="user-icon" src="/static/img/business-false.svg"
@@ -190,6 +207,10 @@
                         <hr>
                         <span>Status: {{obj.status.name}}</span>
                         {% endif %} {% endcomment %}
+                    </span>
+                    <hr>
+                    <span>
+                        <h3 title="{{obj.business.get_names}}">{{ obj.business.get_names }}</h3>
                     </span>
                     {% if obj.follow_up_date %}
                     <hr>

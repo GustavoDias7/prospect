@@ -203,12 +203,67 @@ window.addEventListener("load", function () {
       });
     });
 
+    
+    $('#copy-staff-member-name').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_staff_members_to, #id_staff_members_from").find('option:selected');
+      selectedOptions.each(function () {
+        const staff_members_name = $(this).text().replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        navigator.clipboard.writeText(staff_members_name);
+      });
+    });
+
+    $('#copy-staff-member-name-norm').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_staff_members_to, #id_staff_members_from").find('option:selected');
+      selectedOptions.each(function () {
+        const staff_members_name = $(this).text().replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        const lower_list = ["de", "da", "do", "dos", "das", "e"]
+        const staff_members_name_norm = staff_members_name
+          .split(" ")
+          .map((word, index) => {
+            if (index !== 0 && lower_list.includes(word.toLowerCase())) return word.toLowerCase();
+            else if (word.length === 1) return word.toUpperCase();
+            return (
+              word.charAt(0).toUpperCase() + word.substring(1).toLowerCase()
+            );
+          })
+          .join(" ");
+
+        navigator.clipboard.writeText(staff_members_name_norm);
+      });
+    });
+
+    $('#open-staff-member-google').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_staff_members_to, #id_staff_members_from").find('option:selected');
+      selectedOptions.each(function () {
+        const staff_members_name = $(this).text().replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        const google_link = `https://www.google.com/search?q=${staff_members_name}`
+        window.open(google_link, '_blank');
+      });
+    });
+
     $('#open-phone-number').on('click', function (e) {
       e.preventDefault();
       const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
       selectedOptions.each(function () {
         window.open(`/admin/core/phonenumber/${$(this).val()}/change/`, '_blank');
       });
+    });
+
+    $('#open-website-whois').on('click', function (e) {
+      e.preventDefault();
+      const url = $("#id_website").val();
+      const domain = new URL(url).hostname;
+      window.open(`https://registro.br/tecnologia/ferramentas/whois?search=${domain}`);
+    });
+
+    $('#open-website2-whois').on('click', function (e) {
+      e.preventDefault();
+      const url = $("#id_website2").val();
+      const domain = new URL(url).hostname;
+      window.open(`https://registro.br/tecnologia/ferramentas/whois?search=${domain}`);
     });
 
     $('#open-phone-number-whatsapp').on('click', function (e) {
@@ -228,9 +283,18 @@ window.addEventListener("load", function () {
       selectedOptions.each(function () {
         
         phone_number = $(this).text();
-        console.log(phone_number);
         phone_number = phone_number.replace(/\D/g, "");
         phone_number = `${phone_number}`;
+        navigator.clipboard.writeText(phone_number);
+      });
+    });
+
+    $('#copy-phone-number-ddd-format').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
+      selectedOptions.each(function () {
+        phone_number = $(this).text();
+        phone_number = phone_number.slice(3, -2);
         navigator.clipboard.writeText(phone_number);
       });
     });
@@ -241,7 +305,6 @@ window.addEventListener("load", function () {
       selectedOptions.each(function () {
         
         phone_number = $(this).text();
-        console.log(phone_number);
         phone_number = phone_number.replace(/\D/g, "");
         phone_number = phone_number.slice(2);
         phone_number = `${phone_number}`;
@@ -255,7 +318,6 @@ window.addEventListener("load", function () {
       selectedOptions.each(function () {
         
         phone_number = $(this).text();
-        console.log(phone_number);
         phone_number = phone_number.replace(/\D/g, "");
         phone_number = `021${phone_number}`;
         navigator.clipboard.writeText(phone_number);

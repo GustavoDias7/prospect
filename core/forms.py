@@ -1,14 +1,16 @@
 from django import forms
 from . import models
+from django.utils.safestring import mark_safe
 
 class BusinessForm(forms.ModelForm):
     class Meta:
         model = models.Business
         fields = "__all__"
         widgets = {
-            "address": forms.Textarea(attrs={"rows": 2})
+            "address": forms.Textarea(attrs={"rows": 2}),
+            "address2": forms.Textarea(attrs={"rows": 2})
         }
-        exclude = ["following", "template", "facebook_username"]
+        exclude = ["following", "template", "cellphone", "telephone", "cep2"]
         
     class Media:
         js = ('js/admin/instagram_contacts.js',)
@@ -39,7 +41,17 @@ class InteractionForm(forms.ModelForm):
         
     class Media:
         js = ('js/admin/interaction.js',)
+
+class PhoneNumberForm(forms.ModelForm):
+    full_number = forms.CharField(max_length=20, required=False, help_text=mark_safe('<a id="full_number_convert" href="/" target="_blank">Convert</a>'))
+
+    class Meta:
+        model = models.PhoneNumber
+        fields = "__all__"
         
+    class Media:
+        js = ('js/admin/phone_number.js',)
+
 class TemplateForm(forms.ModelForm):
     class Meta:
         model = models.Template

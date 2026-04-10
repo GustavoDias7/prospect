@@ -9,7 +9,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of, remove_non_numeric, parse_phone)
+from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of, remove_non_numeric, parse_phone, open_whatsapp_sidebar, get_whatsapp_sidebar_data)
 from prospect.constants import Colors, COMMENTS
 from . import models
 from datetime import datetime, timedelta
@@ -159,12 +159,17 @@ def disqualify_old_posts(modeladmin, request, queryset: QuerySet[models.Business
 @admin.action(description="Set not contacted interaction", permissions=["change"])
 def set_not_contacted_interaction(modeladmin, request, queryset: QuerySet[models.Business]):
     not_contacted = models.InteractionStatus.objects.get(name="Not contacted")
-    
-    for index, query in enumerate(queryset):
-        interaction = models.Interaction()
-        interaction.status = not_contacted
-        interaction.business = query
-        interaction.save()
+
+    for query in queryset:
+        try:
+            interaction = models.Interaction.objects.get(business=query)
+            interaction.status = not_contacted
+            interaction.save()
+        except:
+            interaction = models.Interaction()
+            interaction.status = not_contacted
+            interaction.business = query
+            interaction.save()
 
 @admin.action(description="Get data from the Instagram page", permissions=["change"])
 def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business]):
@@ -1779,39 +1784,47 @@ def generate_instagram_contacts(modeladmin: admin.ModelAdmin, request, queryset:
 def consult_cnpj_api(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
 
     for query in queryset:
-        data1 = {}
+        data = {}
         data2 = {}
         cnpj = remove_non_numeric(query.cnpj)
         url1 = f"https://api.opencnpj.org/{cnpj}"
-        res1 = requests.get(url1)
+        res1 = None
+        try:
+            res1 = requests.get(url1)
+        except Exception as e:
+            print(e)
 
         url2 = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
         res2 = requests.get(url2)
+        res2 = None
+        try:
+            res2 = requests.get(url2)
+        except Exception as e:
+            print(e)
 
         if res1.status_code == 200:
-            data1 = res1.json()
-        
-        if res2.status_code == 200:
-            data2 = res2.json()
+            data = res1.json()
+        elif res2.status_code == 200:
+            data = res2.json()
 
         print("status_code: ", res1.status_code, url1)
         print("status_code: ", res2.status_code, url2)
 
-        if not (data1 and data2):
+        if not data:
             return
 
-        query.name = data1.get("razao_social")
-        query.name2 = data1.get("nome_fantasia")
+        query.name = data.get("razao_social")
+        query.name2 = data.get("nome_fantasia")
 
-        logradouro = data1.get("logradouro")
-        numero = data1.get("numero")
-        complemento = data1.get("complemento")
-        bairro = data1.get("bairro")
-        municipio = data1.get("municipio")
-        uf = data1.get("uf")
+        logradouro = data.get("logradouro")
+        numero = data.get("numero")
+        complemento = data.get("complemento")
+        bairro = data.get("bairro")
+        municipio = data.get("municipio")
+        uf = data.get("uf")
         address = " ".join([logradouro, numero, complemento, bairro, municipio, uf])
 
-        cep1 = data1.get("cep")
+        cep1 = data.get("cep")
         if cep1 and (cep1 not in (query.cep, query.cep2)):
             if not query.cep:
                 query.cep = cep1
@@ -1830,28 +1843,57 @@ def consult_cnpj_api(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
                 query.address2 = address
 
 
-        if not (query.telephone or query.cellphone):
-            telefones = data1.get("telefones", [])
-
-            for telefone in telefones:
-                ddd = telefone.get("ddd")
-                numero = telefone.get("numero")
-                phone = f"{ddd}{numero}"
-                if (len(numero) == 8 and not query.telephone):
-                    query.telephone = f"55{phone}"
-                elif (len(numero) == 8 and not query.cellphone):
-                    query.cellphone = f"55{phone}"
-                elif (len(numero) == 9 and not query.cellphone):
-                    query.cellphone = f"55{phone}"
-                elif (len(numero) == 9 and not query.telephone):
-                    query.telephone = phone
+        telefones = data.get("telefones", [])
+        for telefone in telefones:
+            try:
+                phone_number = models.PhoneNumber()
+                phone_number.country_code = "55"
+                phone_number.ddd = str(int(telefone.get("ddd")))
+                phone_number.number = telefone.get("numero")
+                phone_number.save()
+                query.phone_numbers.add(phone_number)
+            except IntegrityError as e: # alwady exist
+                print(e)
 
         if not query.email:
-            query.email = str(data1.get("email", "")).lower()
+            query.email = str(data.get("email", "")).lower()
 
-        query.registration_status = data1.get("situacao_cadastral", "")
+        query.registration_status = data.get("situacao_cadastral", "")
         
-        query.legal_entity_type = data1.get("natureza_juridica", "")
+        query.legal_entity_type = data.get("natureza_juridica", "")
+
+        query.company_port = data.get("porte_empresa", "")
+
+        query.capital_social = int(data.get("capital_social", "").replace(",", ""))
+
+        query.date_start_activity = data.get("data_inicio_atividade", "")
+
+        qsa = data.get("QSA", [])
+        for member in qsa:
+            print(member)
+            qualificacao_socio = member.get("qualificacao_socio", "")
+            staff_member_type = None
+            try:
+                staff_member_type = models.StaffMemberType.objects.get(name=qualificacao_socio)
+            except Exception as e:
+                print(e)
+                print(qualificacao_socio)
+            
+            try:
+                staff_member = models.StaffMember()
+                staff_member.name = member.get("nome_socio", "")
+                staff_member.cnpj = member.get("cnpj_cpf_socio", "")
+                staff_member.age_range = member.get("faixa_etaria", "")
+                staff_member.type = staff_member_type
+                staff_member.is_trusty = True
+                staff_member.save()
+                query.staff_members.add(staff_member)
+            except IntegrityError as e:
+                print(e)
+                name = member.get("nome_socio", "")
+                cnpj = member.get("cnpj_cpf_socio", "")
+                staff_member = models.StaffMember.objects.get(name=name, cnpj=cnpj)
+                query.staff_members.add(staff_member)
 
         query.save()
 
@@ -1887,7 +1929,7 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
     
     def open_image(name: str) -> Tk: 
         root = Tk()
-        root.geometry("800x800+0+0")
+        root.geometry("1300x800+0+0")
         path = get_path(name)
         driver.save_screenshot(path)
         img = Image.open(path)
@@ -1906,12 +1948,12 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
             print(phone_number.get_whatsapp_link())
             print("phone_number:", phone_number)
             driver.get(phone_number.get_whatsapp_link())
-            root = open_image("whatsapp_initial_screen")
+            # root = open_image("whatsapp_initial_screen")
 
             time.sleep(5)
 
-            root.destroy()
-            root = open_image("whatsapp_initial_screen")
+            # root.destroy()
+            # root = open_image("whatsapp_initial_screen")
 
             time.sleep(5)
             
@@ -1921,15 +1963,15 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
 
             if "Scan to log in" in body_html:
                 print("No login!")
-                root.destroy()
+                # root.destroy()
             else:
                 time.sleep(1) # sleep_initial=1,
 
-                root.destroy()
+                # root.destroy()
 
                 def check_whatsapp():
                     result = False
-                    root = open_image("whatsapp_access_chat")
+                    # root = open_image("whatsapp_access_chat")
 
                     time.sleep(5)
 
@@ -1939,9 +1981,62 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
                         phone_number.last_whatsapp_check = timezone.now()
                         phone_number.save()
                         result = True
+                        print("phone_number:", phone_number)
                     terms = ("Profile details", "Dados do perfil")
                     if has_string_in_list(terms, [body_html]):
                         print("Registered!")
+
+                        open_whatsapp_sidebar(driver)
+                        time.sleep(1)
+
+                        whatsapp_data = get_whatsapp_sidebar_data(driver)
+                        print(whatsapp_data)
+                        whatsapp_address = whatsapp_data.get("address")
+                        whatsapp_urls = whatsapp_data.get("urls")
+                        whatsapp_emails = whatsapp_data.get("emails")
+
+                        if whatsapp_address:
+                            if not query.address:
+                                query.address = whatsapp_address
+                            elif not query.address2:
+                                query.address2 = whatsapp_address
+                            elif not query.observation:
+                                query.observation = whatsapp_address
+                            elif whatsapp_address not in query.observation:
+                                query.observation = "\n".join([query.observation, whatsapp_address])
+
+                        if len(whatsapp_urls) > 0:
+                            for url in whatsapp_urls:
+                                if not query.website:
+                                    query.website = url
+                                elif url == query.website:
+                                    continue
+                                elif not query.website2:
+                                    query.website2 = url
+                                elif url == query.website2:
+                                    continue
+                                elif not query.observation:
+                                    query.observation = url
+                                elif url not in query.observation:
+                                    query.observation = "\n".join([query.observation, url])
+
+                        if len(whatsapp_emails) > 0:
+                            for email in whatsapp_emails:
+                                if not query.email:
+                                    query.email = email
+                                elif email == query.email:
+                                    continue
+                                elif not query.observation:
+                                    query.observation = email
+                                elif email not in query.observation:
+                                    query.observation = "\n".join([query.observation, email])
+
+                        query.save()
+
+                        # root.destroy()
+                        # root = open_image("whatsapp_open_sidebar")
+                        
+                        time.sleep(1)
 
                         chat = driver.find_element(By.CSS_SELECTOR, "div#main > header > div:first-of-type")
                         chat_html = chat.get_attribute("textContent")
@@ -1965,6 +2060,13 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
                                     derivered_number.is_whatsapp_active = True
                                     derivered_number.last_whatsapp_check = timezone.now()
                                     derivered_number.derived_from = phone_number
+
+                                    try:
+                                        driver.find_element(By.CSS_SELECTOR, "div#main > header > div:first-of-type img")
+                                        derivered_number.has_whatsapp_photo = True
+                                    except:
+                                        derivered_number.has_whatsapp_photo = False
+
                                     derivered_number.save()
                                     print("derivered_number:", derivered_number)
                                     query.phone_numbers.add(derivered_number)
@@ -1986,14 +2088,21 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
                                     )
                                     derivered_number.is_whatsapp_active = True
                                     derivered_number.last_whatsapp_check = timezone.now()
+
+                                    try:
+                                        driver.find_element(By.CSS_SELECTOR, "div#main > header > div:first-of-type img")
+                                        derivered_number.has_whatsapp_photo = True
+                                    except:
+                                        derivered_number.has_whatsapp_photo = False
+
                                     derivered_number.save()
 
                                     phone_number.is_whatsapp_active = False
                                     phone_number.last_whatsapp_check = timezone.now()
                                     phone_number.save()
 
-                                    print("derivered_number:", derivered_number)
                                     print("phone_number:", phone_number)
+                                    print("derivered_number:", derivered_number)
                                 except Exception as e:
                                     print(e)
                                     print(parsed_phone, wp_number, phone_number)
@@ -2005,17 +2114,31 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
                                 
                                 phone_number.is_whatsapp_active = True
                                 phone_number.last_whatsapp_check = timezone.now()
+
+                                try:
+                                    driver.find_element(By.CSS_SELECTOR, "div#main > header > div:first-of-type img")
+                                    phone_number.has_whatsapp_photo = True
+                                except:
+                                    phone_number.has_whatsapp_photo = False
+
                                 phone_number.save()
                                 print("phone_number:", phone_number)
                             elif phone_number.is_landline() and is_telephone(wp_number):
                                 phone_number.is_whatsapp_active = True
                                 phone_number.last_whatsapp_check = timezone.now()
+                                
+                                try:
+                                    driver.find_element(By.CSS_SELECTOR, "div#main > header > div:first-of-type img")
+                                    phone_number.has_whatsapp_photo = True
+                                except:
+                                    phone_number.has_whatsapp_photo = False
+                                    
                                 phone_number.save()
                                 print("phone_number:", phone_number)
 
                         result = True
                     
-                    root.destroy()
+                    # root.destroy()
                     return result
 
                 try_while(

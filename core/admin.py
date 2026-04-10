@@ -9,12 +9,12 @@ import urllib.parse
 from . import models
 from . import forms
 from django.template import Context, Template
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, HttpRequest
 from PIL import Image, ImageFont, ImageDraw, ImageOps
 import requests
 from io import BytesIO
 import textwrap
-from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, group_horizontally, center_paste, get_dimentions, has_string_in_list, boldify, rounded_corners, generate_rectangle, audio_normalize, replace_accents, get_time_offset
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, group_horizontally, center_paste, get_dimentions, has_string_in_list, boldify, rounded_corners, generate_rectangle, audio_normalize, replace_accents, get_time_offset, get_phone, parse_phone
 from prospect.regex import WEBSITE_PATTERN
 import os
 from django.conf import settings
@@ -27,7 +27,8 @@ from django.urls import reverse
 from django.utils.html import format_html
 from datetime import datetime
 from django.utils import timezone
-# from django.db.models import QuerySet
+from django.db import IntegrityError
+import locale 
 
 # data, rate = sf.read("test.wav") # load audio (with shape (samples, channels))
 # meter = pyln.Meter(rate) # create BS.1770 meter
@@ -179,8 +180,8 @@ class InteractFilter(admin.SimpleListFilter):
 
 @admin.register(models.Business)
 class BusinessAdmin(admin.ModelAdmin):
-    list_filter = ["qualified", "archived", "registration_status", InteractFilter]
-    list_display = ["id", "title", "phone_numbers_", "website_", "followers_", "last_post_", "registration_status_"]
+    list_filter = ["qualified", "archived", "registration_status", InteractFilter, "favorite", "legal_entity_type"]
+    list_display = ["id", "title", "phone_numbers_", "website_", "email_", "date_start_activity_", "registration_status_"]
     # list_editable = ('',)
     actions = [
         actions.get_instagram_data, 
@@ -188,11 +189,6 @@ class BusinessAdmin(admin.ModelAdmin):
         actions.qualify, 
         actions.contacted, 
         actions.archive,
-        # actions.archive_followers,
-        # actions.disqualify_old_posts,
-        # actions.open_link,
-        # actions.set_contact_quality,
-        # actions.check_whatsapp_websites,
         actions.set_not_contacted_interaction,
         actions.generate_instagram_contacts,
         actions.consult_cnpj_api,
@@ -219,31 +215,31 @@ class BusinessAdmin(admin.ModelAdmin):
     def flagged_filter(self, response):
         qs = models.Interaction.objects
         qs = qs.filter(business__qualified=None, business__archived=False, status__name__in=("Flagged",))
-        qs = qs.order_by('-business_id')
+        qs = qs.order_by('-business__top', '-business_id')
         return qs
     
     def qualified_filter(self, response):
         qs = models.Interaction.objects
-        qs = qs.filter(business__qualified=True, business__archived=False, status__name__in=("Not contacted", "Testing"))
-        qs = qs.order_by('-business_id')
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name__in=("Not contacted", "Testing", "Flagged"))
+        qs = qs.order_by('-business__top', '-business_id')
         return qs
     
     def follow_up_filter(self, response):
         qs = models.Interaction.objects
         qs = qs.filter(business__qualified=True, business__archived=False, status__name="Follow up")
-        qs = qs.order_by('follow_up_date')
+        qs = qs.order_by('-business__top', 'follow_up_date')
         return qs
     
     def no_reply_filter(self, response):
         qs = models.Interaction.objects
         qs = qs.filter(business__qualified=True, business__archived=False, status__name="No reply")
-        qs = qs.order_by('follow_up_date')
+        qs = qs.order_by('-business__top', 'follow_up_date')
         return qs
     
     def maybe_in_the_future_filter(self, response):
         qs = models.Interaction.objects
         qs = qs.filter(business__qualified=True, business__archived=False, status__name="Maybe in the future")
-        qs = qs.order_by('follow_up_date')
+        qs = qs.order_by('-business__top', 'follow_up_date')
         return qs
     
     def meeting_filter(self, response):
@@ -280,9 +276,18 @@ class BusinessAdmin(admin.ModelAdmin):
             businesses = []
             for row in reader:
                 cnpj = row[0].strip()
-                businesses.append(models.Business(cnpj=cnpj))
+                try:
+                    business = models.Business(cnpj=cnpj)
+                    business.save()
+                    interaction = models.Interaction()
+                    interaction.status = models.InteractionStatus.objects.get(name="Not contacted")
+                    interaction.business = business
+                    interaction.save()
+                except IntegrityError as e:
+                    print(e)
 
-            models.Business.objects.bulk_create(businesses, unique_fields=["cnpj"], ignore_conflicts=True)
+            # models.Business.objects.bulk_create(businesses, unique_fields=["cnpj"], ignore_conflicts=True)
+
 
         return response 
     
@@ -429,34 +434,42 @@ class BusinessAdmin(admin.ModelAdmin):
         if obj:
             if obj.name:
                 href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.name)}"
-                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
+                html1 = f'<a href="{href1}" target="_blank">CNPJ</a>'
                 href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
-                html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
-                html3 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
-                html4 = "<a href='/' id='id_name_copy'>Copy name</a>"
+                html2 = f'<a href="{href2}" target="_blank">duckduckgo</a>'
+                html3 = "<a href='/' id='id_name_normalize'>Normalize</a>"
+                html4 = "<a href='/' id='id_name_copy'>Copy</a>"
                 href5 = f"https://www.google.com/search?q={obj.name}"
-                html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
-                html = " | ".join([html1, html2, html5, html3, html4])
+                html5 = f'<a href="{href5}" target="_blank">Google</a>'
+                href6 = f"https://www.google.com/search?q={obj.name} LinkedIn"
+                html6 = f'<a href="{href6}" target="_blank">Google LinkedIn</a>'
+                html = " | ".join([html1, html2, html5, html6, html3, html4])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
 
             if obj.name2:
                 href1 = f"https://casadosdados.com.br/solucao/cnpj?q={replace_accents(obj.name2)}"
-                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
+                html1 = f'<a href="{href1}" target="_blank">CNPJ</a>'
                 href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name2}"
-                html2 = f'<a href="{href2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
-                html3 = "<a href='/' id='id_name2_normalize'>Normalize name</a>"
-                html4 = "<a href='/' id='id_name2_copy'>Copy name</a>"
+                html2 = f'<a href="{href2}" target="_blank">duckduckgo</a>'
+                html3 = "<a href='/' id='id_name2_normalize'>Normalize</a>"
+                html4 = "<a href='/' id='id_name2_copy'>Copy</a>"
                 href5 = f"https://www.google.com/search?q={obj.name2}"
-                html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
-                html = " | ".join([html1, html2, html5, html3, html4])
+                html5 = f'<a href="{href5}" target="_blank">Google</a>'
+                href6 = f"https://www.google.com/search?q={obj.name} LinkedIn"
+                html6 = f'<a href="{href6}" target="_blank">Google LinkedIn</a>'
+                html = " | ".join([html1, html2, html5, html6, html3, html4])
                 help_texts["help_texts"].update({"name2": mark_safe(html)})
             
             if obj.cnpj:
                 href1 = f"https://casadosdados.com.br/solucao/cnpj/{obj.get_cnpj()}"
-                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">Casa dos Dados</a>'
-                html2 = "<a href='/' id='id_cnpj_copy'>Copy CNPJ</a>"
-                html3 = "<a href='/' id='id_cnpj_num_copy'>Copy CNPJ numbers</a>"
-                html = " | ".join([html1, html2, html3])
+                html1 = f'<a href="{href1}" target="_blank" style="font-size: 12px;">CNPJ</a>'
+               
+                html2 = "<a href='/' id='id_cnpj_copy'>Copy</a>"
+                html3 = "<a href='/' id='id_cnpj_num_copy'>Copy numbers</a>"
+                
+                href5 = f"https://www.google.com/search?q={obj.cnpj}"
+                html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
+                html = " | ".join([html1, html2, html3, html5])
                 help_texts["help_texts"].update({"cnpj": mark_safe(html)})
                 
             if obj.cellphone:
@@ -478,6 +491,15 @@ class BusinessAdmin(admin.ModelAdmin):
                 if obj.get_cellphone_ddd():
                     html = f"{html_ddd}" + html
                 help_texts["help_texts"].update({"telephone": mark_safe(html)})
+
+            if True:
+                capital_social = (obj.capital_social or 0) / 100 
+                html = locale.currency(capital_social, grouping=True)
+                help_texts["help_texts"].update({"capital_social": mark_safe(html)})
+
+            if obj.date_start_activity:
+                html = get_time_offset(obj.date_start_activity)
+                help_texts["help_texts"].update({"date_start_activity": mark_safe(html)})
                 
             if obj.instagram_username:
                 href1 = obj.get_instagram_link()
@@ -493,49 +515,118 @@ class BusinessAdmin(admin.ModelAdmin):
                 
                 html = " | ".join([html1, html2, html3, html5, html4])
                 help_texts["help_texts"].update({"instagram_username": mark_safe(html)}) 
+
+            if obj.facebook_username:
+                href1 = f"https://www.facebook.com/{obj.facebook_username}"
+                html1 = f'<a href="{href1}" target="_blank">Facebook</a>'
+                href3 = f"https://duckduckgo.com/?t=ffab&q={obj.facebook_username}"
+                html3 = f'<a href="{href3}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
+                href5 = f"https://www.google.com/search?q={obj.instagram_username}"
+                html5 = f'<a href="{href5}" target="_blank" style="font-size: 12px;">Google</a>'
+                
+                html = " | ".join([html1, html3, html5])
+                help_texts["help_texts"].update({"facebook_username": mark_safe(html)}) 
             
             if obj.email:
                 href1 = f"https://duckduckgo.com/?t=ffab&q={obj.email + ' CNPJ'}"
                 html1 = f'<a href="{href1}" target="_blank">Search CNPJ</a>'
-                html = " | ".join([html1])
+                href2 = obj.email.split("@")[1]
+                html2 = f'<a href="https://{href2}" target="_blank">Open domain</a>'
+                html = " | ".join([html1, html2])
                 help_texts["help_texts"].update({"email": mark_safe(html)})
             
+            if obj.cep:
+                href1 = f"https://duckduckgo.com/?t=ffab&q={obj.cep + ' CNPJ'}"
+                html1 = f'<a href="{href1}" target="_blank">Search CNPJ</a>'
+                href2 = f"https://www.google.com/maps/search/{obj.cep}"
+                html2 = f'<a href="{href2}" target="_blank">Google Maps</a>'
+                href3 = f"https://www.google.com/search?q={obj.cep}"
+                html3 = f'<a href="{href3}" target="_blank"">Google</a>'
+                html = " | ".join([html1, html2, html3])
+                help_texts["help_texts"].update({"cep": mark_safe(html)})
+
             if obj.address:
                 href1 = f"https://duckduckgo.com/?t=ffab&q={obj.address + ' CNPJ'}"
                 html1 = f'<a href="{href1}" target="_blank">Search CNPJ</a>'
                 href2 = f"https://www.google.com/maps/search/{obj.address}"
                 html2 = f'<a href="{href2}" target="_blank">Google Maps</a>'
-                html = " | ".join([html1, html2])
+                href3 = f"https://www.google.com/search?q={obj.address}"
+                html3 = f'<a href="{href3}" target="_blank"">Google</a>'
+                html = " | ".join([html1, html2, html3])
                 help_texts["help_texts"].update({"address": mark_safe(html)})
+
+            if obj.address2:
+                href1 = f"https://duckduckgo.com/?t=ffab&q={obj.address2 + ' CNPJ'}"
+                html1 = f'<a href="{href1}" target="_blank">Search CNPJ</a>'
+                href2 = ""
+                
+                if "http" in obj.address2:
+                    href2 = obj.address2
+                else:
+                    href2 = f"https://www.google.com/maps/search/{obj.address2}"
+                    
+                html2 = f'<a href="{href2}" target="_blank">Google Maps</a>'
+                href3 = f"https://www.google.com/search?q={obj.address}"
+                html3 = f'<a href="{href3}" target="_blank"">Google</a>'
+                html = " | ".join([html1, html2, html3])
+                help_texts["help_texts"].update({"address2": mark_safe(html)})
+
+            if obj.website:
+                html1 = f'<a href="/" id="open-website-whois" target="_blank">Open Whois</a>'
+                domain = urllib.parse.urlparse(obj.website).netloc
+                html2 = f'<a href="https://builtwith.com/{domain}" target="_blank">Built With</a>'
+                html = " | ".join([html1, html2])
+                help_texts["help_texts"].update({"website": mark_safe(html)})
+
+            if obj.website2:
+                html1 = f'<a href="/" id="open-website2-whois" target="_blank">Open Whois</a>'
+                domain = urllib.parse.urlparse(obj.website2).netloc
+                html2 = f'<a href="https://builtwith.com/{domain}" target="_blank">Built With</a>'
+                html = " | ".join([html1, html2])
+                help_texts["help_texts"].update({"website2": mark_safe(html)})
                 
             if obj.staff_members:
-                inner_text = "Open Staff Member"
-                style = "display: block; margin: 0px auto 8px;"
-                id = "open-staff-member"
-                html1 = f'<button id="{id}" style="{style}">{inner_text}</button>'
-                html = " | ".join([html1])
-                help_texts["help_texts"].update({"staff_members": mark_safe(html)})
+                
+                inner_text1 = "Open Staff Member"
+                inner_text2 = "Copy name"
+                inner_text3 = "Open Google"
+                inner_text4 = "Copy norm name"
+                id1 = "open-staff-member"
+                id2 = "copy-staff-member-name"
+                id3 = "open-staff-member-google"
+                id4 = "copy-staff-member-name-norm"
+                html1 = f'<button id="{id1}" type="button" class="button">{inner_text1}</button>'
+                html2 = f'<button id="{id2}" type="button" class="button">{inner_text2}</button>'
+                html3 = f'<button id="{id3}" type="button" class="button">{inner_text3}</button>'
+                html4 = f'<button id="{id4}" type="button" class="button">{inner_text4}</button>'
+                style_wrapper = "display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: center;"
+                html = " ".join([html1, html2, html4, html3])
+                html_wrapper = f'<div style="{style_wrapper}">{html}</div>'
+                help_texts["help_texts"].update({"staff_members": mark_safe(html_wrapper)})
 
             if obj.phone_numbers:
-                inner_text1 = "Open Phone Number"
-                inner_text2 = "Open WhatsApp Number"
+                inner_text1 = "Open Number"
+                inner_text2 = "Open WhatsApp"
                 inner_text3 = "Copy Long-distance number"
-                inner_text4 = "Copy number with DDD"
+                inner_text4 = "Copy number + DDD"
                 inner_text5 = "Copy number no DDD"
+                inner_text6 = "Copy fomatted number"
                 # style = "display: block; margin: 0px auto 8px;"
-                style_wrapper = "display: flex; gap: 16px; align-items: center; justify-content: center;"
+                style_wrapper = "display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: center;"
                 id1 = "open-phone-number"
                 id2 = "open-phone-number-whatsapp"
                 id3 = "copy-phone-number-long"
                 id4 = "copy-phone-number-ddd"
                 id5 = "copy-phone-number-no-ddd"
-                html1 = f'<button id="{id1}">{inner_text1}</button>'
-                html2 = f'<button id="{id2}">{inner_text2}</button>'
-                html3 = f'<button id="{id3}">{inner_text3}</button>'
-                html4 = f'<button id="{id4}">{inner_text4}</button>'
-                html5 = f'<button id="{id5}">{inner_text5}</button>'
-                html = " ".join([html1, html2, html3, html4, html5])
-                html_wrapper = f'<div  style="{style_wrapper}">{html}</div>'
+                id6 = "copy-phone-number-ddd-format"
+                html1 = f'<button id="{id1}" type="button" class="button">{inner_text1}</button>'
+                html2 = f'<button id="{id2}" type="button" class="button">{inner_text2}</button>'
+                html3 = f'<button id="{id3}" type="button" class="button">{inner_text3}</button>'
+                html4 = f'<button id="{id4}" type="button" class="button">{inner_text4}</button>'
+                html5 = f'<button id="{id5}" type="button" class="button">{inner_text5}</button>'
+                html6 = f'<button id="{id6}" type="button" class="button">{inner_text6}</button>'
+                html = " ".join([html1, html2, html3, html4, html5, html6])
+                html_wrapper = f'<div style="{style_wrapper}">{html}</div>'
                 help_texts["help_texts"].update({"phone_numbers": mark_safe(html_wrapper)})
                 
             if obj.last_post:
@@ -562,8 +653,11 @@ class BusinessAdmin(admin.ModelAdmin):
             html = f'<a href="{obj.get_instagram_link()}" target="_blank">{inner_text}</a>'
             return mark_safe(html)
         elif obj.name:
-            short_name = obj.name[0:19] if len(obj.name) > 20 else obj.name
-            return short_name
+            name = obj.name or ""
+            name2 = obj.name2 or ""
+            short_name = name[0:19] if len(name) > 20 else name
+            short_name2 = name2[0:19] if len(name2) > 20 else name2
+            return mark_safe("<br>".join([short_name, short_name2]))
         else:
             return "-"
         
@@ -576,6 +670,16 @@ class BusinessAdmin(admin.ModelAdmin):
             return mark_safe(html)
         else:
             return None
+        
+    @admin.display(description='start activity', ordering='-date_start_activity')
+    def date_start_activity_(self, obj: models.Business):
+        if obj.date_start_activity:
+            title = obj.date_start_activity.strftime("%b. %d, %Y")
+            inner_text = get_time_offset(obj.date_start_activity)
+            html = f"<span title='{title}'>{inner_text}</span>"
+            return mark_safe(html)
+        else:
+            return None
 
     @admin.display(description='website')
     def website_(self, obj: models.Business):
@@ -583,19 +687,32 @@ class BusinessAdmin(admin.ModelAdmin):
         
         if obj.website:
             leng = 30
-            inner_text = obj.website[0:leng - 1] if len(obj.website) > leng else obj.website
-            if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
+            domain = urllib.parse.urlparse(obj.website).netloc
+            inner_text = domain[0:leng - 1] if len(domain) > leng else domain
+            if "www." in inner_text: inner_text = inner_text.replace("www.", "")
             html1 = f'<a href="{obj.website}" target="_blank">{inner_text}</a>'
             html.append(mark_safe(html1))
             
         if obj.website2:
             leng = 30
-            inner_text = obj.website2[0:leng - 1] if len(obj.website2) > leng else obj.website2
-            if "https://" in inner_text: inner_text = inner_text.replace("https://", "")
+            domain = urllib.parse.urlparse(obj.website2).netloc
+            inner_text = domain[0:leng - 1] if len(domain) > leng else domain
+            if "www." in inner_text: inner_text = inner_text.replace("www.", "")
             html2 = f'<a href="{obj.website2}" target="_blank">{inner_text}</a>'
             html.append(mark_safe(html2))
         
         return mark_safe("<br style='margin-bottom: 4px;'/>".join(html))
+    
+    @admin.display(description='email')
+    def email_(self, obj: models.Business):
+        html = []
+        
+        if obj.email:
+            color_status = "red" if has_string_in_list(["contab", "contador"], [obj.email]) else "unset"
+            html = f'<span title="{obj.email}" style="display: inline-block; white-space: nowrap; padding: 0 0 2px 0;margin: 0;max-width: 160px;text-overflow: ellipsis;overflow-x: hidden; color: {color_status}">{obj.email}</span>'
+            return mark_safe(html)
+        else:
+            return None
         
     @admin.display(description='phone')
     def phone_(self, obj: models.Business):
@@ -692,7 +809,7 @@ class BusinessInline(admin.StackedInline):
                     html1 = f'<a href="{help_text1}" target="_blank" style="font-size: 12px;">casadosdados</a>'
                     help_text2 = f"https://duckduckgo.com/?t=ffab&q={business.name}"
                     html2 = f'<a href="{help_text2}" target="_blank" style="font-size: 12px;">duckduckgo</a>'
-                    html3 = "<a href='/' id='id_name_copy_business'>Copy name</a>"
+                    html3 = "<a href='/' id='id_name_copy_business'>Copy</a>"
                     html = f" | ".join([html1, html2, html3])
                     help_texts["help_texts"].update({"name": mark_safe(html)})
                     
@@ -767,15 +884,15 @@ class StaffMemberAdmin(admin.ModelAdmin):
                 html1 = f'<a href="{href1}" target="_blank">casadosdados</a>'
                 href2 = f"https://duckduckgo.com/?t=ffab&q={obj.name}"
                 html2 = f'<a href="{href2}" target="_blank">duckduckgo</a>'
-                html3 = "<a href='/' id='id_name_copy'>Copy name</a>"
+                html3 = "<a href='/' id='id_name_copy'>Copy</a>"
                 html4 = "<a href='/' id='id_name_greeting'>Get greeting</a>"
-                html5 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
+                html5 = "<a href='/' id='id_name_normalize'>Normalize</a>"
                 html = " | ".join([html1, html2, html3, html4, html5])
                 help_texts["help_texts"].update({"name": mark_safe(html)})
                 
             if obj.cnpj:
-                href1 = f"https://casadosdados.com.br/solucao/cnpj?q={obj.cnpj}"
-                html1 = f'<a href="{href1}" target="_blank">casadosdados</a>'
+                href1 = f"https://casadosdados.com.br/solucao/cnpj/{obj.get_cnpj()}"
+                html1 = f'<a href="{href1}" target="_blank">CNPJ</a>'
                 href2 = f"https://duckduckgo.com/?t=ffab&q={obj.cnpj}"
                 html2 = f'<a href="{href2}" target="_blank">duckduckgo</a>'
                 html = " | ".join([html1, html2])
@@ -802,7 +919,7 @@ class StaffMemberAdmin(admin.ModelAdmin):
                 help_texts["help_texts"].update({"instagram": mark_safe(html)}) 
                 
         else:
-            html5 = "<a href='/' id='id_name_normalize'>Normalize name</a>"
+            html5 = "<a href='/' id='id_name_normalize'>Normalize</a>"
             html = " | ".join([html5])
             help_texts["help_texts"].update({"name": mark_safe(html)})
         
@@ -937,6 +1054,20 @@ class InteractionContactViaAdmin(admin.ModelAdmin):
 class PhoneNumberAdmin(admin.ModelAdmin):
     search_fields = ["id", "ddd", "country_code", "number"]
     autocomplete_fields = ["derived_from"]
+    form = forms.PhoneNumberForm
+
+    # def response_change(self, request: HttpRequest, obj: models.PhoneNumber):
+    #     if request.method == "POST":
+    #         full_number = request.POST.get("full_number")
+
+    #         if full_number:
+    #             full_number_raw = get_phone(full_number)
+    #             parsed_phone = parse_phone(full_number_raw)
+    #             obj.ddd = parsed_phone.get("ddd")
+    #             obj.number = parsed_phone.get("number")
+    #             obj.save()
+        
+        # return super().response_change(request, obj)
 
 @admin.register(models.Website)
 class WebsiteAdmin(admin.ModelAdmin):

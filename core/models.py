@@ -38,6 +38,7 @@ class StaffMember(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     type = models.ForeignKey(to="StaffMemberType", on_delete=models.SET_NULL, null=True, blank=True)
     cnpj = models.CharField(max_length=18, null=True, blank=True)
+    age_range = models.CharField(max_length=30, null=True, blank=True)
     phone = models.CharField(max_length=13, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     instagram = models.CharField(max_length=30, null=True, blank=True)
@@ -45,8 +46,11 @@ class StaffMember(models.Model):
     address = models.CharField(max_length=200, null=True, blank=True)
     contacted = models.BooleanField(default=False)
     is_trusty = models.BooleanField(default=False, verbose_name="trusty")
-    observation = models.TextField(max_length=400, null=True, blank=True)
+    observation = models.TextField(max_length=1000, null=True, blank=True)
     
+    def get_cnpj(self):
+        return remove_non_numeric(self.cnpj)
+
     def get_whatsapp_link(self, add_message: bool | None = True):
         phone = remove_non_numeric(self.phone)
         
@@ -122,7 +126,10 @@ class StaffMember(models.Model):
             print("DDD not found!")
             
         return ddd
-            
+    
+    class Meta:
+        unique_together = ('name', 'cnpj',)
+
     def __str__(self):
         if self.name: 
             if self.type:
@@ -144,6 +151,9 @@ class Business(models.Model):
     cnpj = models.CharField(max_length=18, unique=True, null=True, blank=True)
     registration_status = models.CharField(max_length=15, null=True, blank=True)
     legal_entity_type = models.CharField(max_length=30, null=True, blank=True)
+    company_port = models.CharField(max_length=30, null=True, blank=True)
+    date_start_activity = models.DateTimeField(default=None, null=True, blank=True)
+    capital_social = models.PositiveIntegerField(null=True, blank=True)
     instagram_username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     facebook_username = models.CharField(max_length=30, unique=True, null=True, blank=True)
     cellphone = models.CharField(max_length=13, null=True, blank=True)
@@ -163,13 +173,31 @@ class Business(models.Model):
     staff_members = models.ManyToManyField(to=StaffMember, blank=True, related_name="staff_member")
     qualified = models.BooleanField(default=None, help_text="Account has a website, has been inactive for an extended period, or the page is not found.", null=True, blank=True)
     archived = models.BooleanField(default=False)
+    favorite = models.BooleanField(default=False)
+    top = models.BooleanField(default=False)
     last_post = models.DateTimeField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
+    # social_media = models.ForeignKey("SocialMedia", null=True, blank=True, on_delete=models.SET_NULL)
     # interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL, related_name="interaction_ref")
     followers = models.PositiveIntegerField(null=True, blank=True)
     following = models.PositiveIntegerField(null=True, blank=True)
     # contacted = models.BooleanField(default=False)
     observation = models.TextField(max_length=1000, null=True, blank=True)
+    
+    def get_staff_members(self) -> str: 
+        if len(self.staff_members.all()) > 0:
+            return "\n".join(self.staff_members.all().values_list("name", flat=True))
+        else:
+            return "No staff member"
+        
+    def get_phone_numbers(self) -> str: 
+        if len(self.phone_numbers.all()) > 0:
+            phone_numbers = []
+            for phone_number in self.phone_numbers.all():
+                phone_numbers.append(phone_number.fget_full_number_whatsapp())
+            return "\n".join(phone_numbers)
+        else:
+            return "No phone number"
     
     def get_cnpj(self):
         return remove_non_numeric(self.cnpj)
@@ -336,6 +364,15 @@ class Business(models.Model):
         else:
             return None
     
+    def get_names(self):
+        names = []
+        names.append(self.name or "")
+        names.append(self.name2 or "")
+        
+        if not (self.name and self.name2):
+            names.append(self.instagram_username or self.facebook_username or "")
+        return "\n".join(names)
+    
     def __str__(self):
         if self.instagram_username: return self.instagram_username
         else: return f"Instagram {self.id}"
@@ -409,15 +446,38 @@ class Website(models.Model):
     social_media = models.BooleanField(default=False)
     ignore = models.BooleanField(default=False)
 
+SOCIAL_MEDIA_CATEGORIES = [
+    ("1", "instagram"),
+    ("2", "facebook"),
+    ("3", "linkedin"),
+    ("4", "x"),
+]
+class SocialMedia(models.Model):
+    username = models.CharField(max_length=30)
+    category = models.CharField(max_length=1, null=True, blank=True, choices=SOCIAL_MEDIA_CATEGORIES)
+    is_active = models.BooleanField(null=True, blank=True)
+    observation = models.TextField(max_length=1000, null=True, blank=True)
+
+    class Meta:
+        unique_together = ("username", "category")
+
+    def get_link(self) -> str:
+        return "https://"
+    
+    def __str__(self):
+        return f"{self.username} {self.category}"
+
+
 class PhoneNumber(models.Model):
     # Core fields
     country_code = models.CharField(max_length=5, default="55")   # e.g. "55"
     ddd = models.CharField(max_length=2)            # e.g. "21"
     number = models.CharField(max_length=9)        # e.g. "987654321"
 
-    # WhatsApp status
+    # WhatsApp
     is_whatsapp_active = models.BooleanField(null=True, blank=True)
     last_whatsapp_check = models.DateTimeField(null=True, blank=True)
+    has_whatsapp_photo = models.BooleanField(null=True, blank=True)
 
     # Metadata
     last_call_at = models.DateTimeField(null=True, blank=True)

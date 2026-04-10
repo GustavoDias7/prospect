@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import os
 from environs import Env
+import locale 
+
+locale.setlocale(locale.LC_MONETARY, 'pt_BR.UTF-8')
 
 env = Env()
 env.read_env()
