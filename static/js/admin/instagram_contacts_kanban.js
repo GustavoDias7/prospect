@@ -1,5 +1,6 @@
 window.addEventListener("load", function () {
   (function ($) {
+
     function counterCharacters(fieldId) {
       if ($(`#${fieldId}`).length) {
         html = `<div class='help' id='${fieldId}-counter'>Characters: <span></span> of <span></span></div>`;
@@ -102,10 +103,15 @@ window.addEventListener("load", function () {
       });
     }
 
-    copy_field_value({
-      button_id: "copy-message",
-      field_id: "rendered-template",
-    });
+    // copy_field_value({
+    //   button_id: "copy-message",
+    //   field_id: "rendered-template",
+    // });
+
+    // copyHTML({
+    //   button_id: "copy-message",
+    //   field_id: "rendered-template",
+    // })
 
     copy_field_value({
       button_id: "id_long_distance_number_copy",

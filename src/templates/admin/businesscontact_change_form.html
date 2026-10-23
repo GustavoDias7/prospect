@@ -1,48 +1,52 @@
 {% extends "admin/change_form.html" %}
+
 {% block submit_buttons_bottom %}
 
-{% if template %}
+{% if template_message %}
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<div id="app">
     <fieldset>
-        <div class="inline-heading">MESSAGE</div>
+        <div class="inline-heading">Template</div>
     </fieldset>
-    <pre id="rendered-template">{{template}}</pre>
-{% endif %}
-
-{% if business_contact.primary_color or business_contact.secondary_color %}
-    <div class="submit-row">
-        {% if template %}
-        <input  class="copy-message" id="copy-message" type="button" value="Copy message">
-        {% endif %}
-        <input 
-            type="submit"
-            name="generate_image"
-            id="generate_image" 
-            value="Generate image" 
-        />
+    <div class="email-template">
+        <p id="rendered-template-subject">{{template_subject}}</p>
+        <div id="rendered-template-message">
+            {{template_message}}
+        </div>
     </div>
-{% elif template %}
     <div class="submit-row">
-        <input  class="copy-message" id="copy-message" type="button" value="Copy message">
+        <input class="copy-message" id="copy-template-subject" type="button" value="Copy subject">
+        <input class="copy-message" id="copy-template-message" type="button" value="Copy message">
+        <select class="copy-message" id="selected_email" name="selected_email">
+            <option value="">No e-mail selected</option>
+            {% for email in business.emails.all %}
+            <option value="{{email.id}}">{{email.address}}</option>
+            {% endfor %}
+        </select>
+        <select class="copy-message" id="selected_member" name="selected_member" v-model="selected_member">
+            <option value="">No member selected</option>
+            {% for member in business.staff_members.all %}
+            <option value="{{member.get_first_name}}" :key="{{member.pk}}">{{member.name.title}}</option>
+            {% endfor %}
+        </select>
+        <input class="copy-message" id="send-email" type="button" value="Send e-mail">
+        <input class="copy-message" id="copy-email-interaction-data" type="button" value="Copy interaction">
     </div>
-{% endif %}
+</div>
 
-{% if business_contact %}
+<script>
+    const { createApp } = Vue
 
-    {% if business_contact.image1 or business_contact.image2 or business_contact.image3 or business_contact.image4 %}
-    <fieldset><div class="inline-heading">IMAGES</div></fieldset>
-    {% endif %}
-    {% if business_contact.image1 %}
-    <img class="business_contact_image" height="680" src="{{business_contact.image1.url}}?{% now "U" %}" alt="{{business_contact.name}}">
-    {% endif %}
-    {% if business_contact.image2 %}
-    <img class="business_contact_image" height="680" src="{{business_contact.image2.url}}?{% now "U" %}" alt="{{business_contact.name}}">
-    {% endif %}
-    {% if business_contact.image3 %}
-    <img class="business_contact_image" height="680" src="{{business_contact.image3.url}}?{% now "U" %}" alt="{{business_contact.name}}">
-    {% endif %}
-    {% if business_contact.image4 %}
-    <img class="business_contact_image" height="680" src="{{business_contact.image4.url}}?{% now "U" %}" alt="{{business_contact.name}}">
-    {% endif %}
+    const app = createApp({
+        data() {
+            return {
+                selected_member: "",
+            }
+        },
+    })
+    app.config.compilerOptions.delimiters = ['[[', ']]']
+    app.mount('#app')
+</script>
 {% endif %}
 
 {{ block.super }}

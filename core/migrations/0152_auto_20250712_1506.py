@@ -8,15 +8,17 @@ def add_default_interaction(apps, schema_editor):
     Interaction = apps.get_model('core', 'Interaction')
     InteractionStatus = apps.get_model('core', 'InteractionStatus')
     
-    interaction_business = Interaction.objects.filter(business__isnull=False).values_list("business_id", flat=True)
-    not_contacted = InteractionStatus.objects.get(name="Not contacted")
-    
-    for business in Business.objects.exclude(pk__in=interaction_business):
-        interaction = Interaction()
-        interaction.status = not_contacted
-        interaction.business = business
-        interaction.save()
-            
+    try:
+        interaction_business = Interaction.objects.filter(business__isnull=False).values_list("business_id", flat=True)
+        not_contacted = InteractionStatus.objects.get(name="Not contacted")
+        
+        for business in Business.objects.exclude(pk__in=interaction_business):
+            interaction = Interaction()
+            interaction.status = not_contacted
+            interaction.business = business
+            interaction.save()
+    except Exception as e:
+        print(e)
 
 class Migration(migrations.Migration):
 

@@ -174,13 +174,11 @@
                         <img class="user-icon" src="/static/img/user-false.svg" title="No staff member" />
                         {% endif %}
 
-                        {% if obj.business.instagram_username %}
-                        <a class="user-icon" href="{{obj.business.get_instagram_link}}" target="_blank">
-                            <img class="user-icon" src="/static/img/instagram-true.svg"
-                                title="@{{obj.business.instagram_username}}" />
-                        </a>
+                        {% if obj.business.social_medias.all|length > 0 %}
+                        <img class="user-icon" src="/static/img/instagram-true.svg"
+                            title="{{obj.business.get_social_medias}}" />
                         {% else %}
-                        <img class="user-icon" src="/static/img/instagram-false.svg" title="No Instagram username" />
+                        <img class="user-icon" src="/static/img/instagram-false.svg" title="No social medias" />
                         {% endif %}
 
                         {% if obj.business.phone_numbers.all|length > 0 %}
@@ -188,6 +186,19 @@
                             title="{{obj.business.get_phone_numbers}}" />
                         {% else %}
                         <img class="user-icon" src="/static/img/phone-false.svg" title="No phone number" />
+                        {% endif %}
+
+                        {% if obj.business.domains.all|length > 0 %}
+                        <img class="user-icon" src="/static/img/internet-true.svg"
+                            title="{{obj.business.get_domains}}" />
+                        {% else %}
+                        <img class="user-icon" src="/static/img/internet-false.svg" title="No domains" />
+                        {% endif %}
+
+                        {% if obj.business.emails.all|length > 0 %}
+                        <img class="user-icon" src="/static/img/mail-true.svg" title="{{obj.business.get_emails}}" />
+                        {% else %}
+                        <img class="user-icon" src="/static/img/mail-false.svg" title="No email address" />
                         {% endif %}
 
                         {% if obj.business.registration_status|lower == "ativa" %}

@@ -28,8 +28,8 @@ window.addEventListener("load", function () {
         const id = $(this).prop('id').replace("custom-results-card-", "");
         counter[id] = 0;
       })
-      const html = ` | <span class="counter"><span>0</span> selected</span>`
-      $(".category-header span").after(html)
+      const html = ` <span class="counter" style="display: none;"> | <span>0</span> selected</span>`;
+      $(".category-header span").after(html);
 
       $("input[id^=checkbox-]").on("change", function () {
         const id = $(this).prop('id').replace("checkbox-", "");
@@ -41,6 +41,12 @@ window.addEventListener("load", function () {
         $(`#custom-results-card-${id} input.action-select`).each(function () {
             $(this).prop('checked', is_checked);
         })
+
+        if (counter[id]) {
+          $(`#category-header-${id} .counter`).css("display", "inline");
+        } else {
+          $(`#category-header-${id} .counter`).css("display", "none");
+        }
       })
 
       $(`.custom-results-card input.action-select`).each(function () {
@@ -52,6 +58,12 @@ window.addEventListener("load", function () {
           if (is_checked) counter[id] += 1;
           else counter[id] -= 1;
           $(`#category-header-${id} .counter span`).text(counter[id]);
+
+          if (counter[id]) {
+            $(`#category-header-${id} .counter`).css("display", "inline");
+          } else {
+            $(`#category-header-${id} .counter`).css("display", "none");
+          }
         })
       })
     })(django.jQuery);

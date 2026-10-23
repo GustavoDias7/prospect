@@ -1,5 +1,5 @@
 from django.db import models
-from prospect.utils import remove_non_numeric, has_string_in_list, get_time_offset
+from prospect.utils import remove_non_numeric, get_time_offset
 import datetime
 from pytz import timezone
 from prospect.constants import ASPECT_RATIOS, VERTICAL_ASPECT_RATIOS, DDD, COLORS, INTERACTION_CONTACTS, INTERACTION_STATUS
@@ -98,7 +98,9 @@ class StaffMember(models.Model):
     
     def get_first_name(self):
         if self.name:
-            return self.name.split(" ")[0]
+            return self.name.split(" ")[0].capitalize()
+        else:
+            return ""
     
     def fcellphone(self):
         if self.phone:
@@ -148,6 +150,7 @@ class StaffMemberType(models.Model):
 class Business(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     name2 = models.CharField(max_length=50, null=True, blank=True)
+    tags = models.ManyToManyField("Tag", blank=True)
     cnpj = models.CharField(max_length=18, unique=True, null=True, blank=True)
     registration_status = models.CharField(max_length=15, null=True, blank=True)
     legal_entity_type = models.CharField(max_length=30, null=True, blank=True)
@@ -165,7 +168,9 @@ class Business(models.Model):
     )
     website = models.URLField(max_length=200, null=True, blank=True)
     website2 = models.URLField(max_length=200, null=True, blank=True)
+    domains = models.ManyToManyField(to="Domain", blank=True, related_name="domain")
     email = models.EmailField(null=True, blank=True)
+    emails = models.ManyToManyField(to="Email", blank=True, related_name="email")
     cep = models.CharField(max_length=8, null=True, blank=True)
     address = models.CharField(max_length=200, null=True, blank=True)
     cep2 = models.CharField(max_length=8, null=True, blank=True)
@@ -177,7 +182,7 @@ class Business(models.Model):
     top = models.BooleanField(default=False)
     last_post = models.DateTimeField(default=None, null=True, blank=True)
     template = models.ForeignKey("Template", null=True, blank=True, on_delete=models.SET_NULL)
-    # social_media = models.ForeignKey("SocialMedia", null=True, blank=True, on_delete=models.SET_NULL)
+    social_medias = models.ManyToManyField(to="SocialMedia", blank=True, related_name="social_media")
     # interaction = models.OneToOneField("Interaction", null=True, blank=True, on_delete=models.SET_NULL, related_name="interaction_ref")
     followers = models.PositiveIntegerField(null=True, blank=True)
     following = models.PositiveIntegerField(null=True, blank=True)
@@ -198,7 +203,35 @@ class Business(models.Model):
             return "\n".join(phone_numbers)
         else:
             return "No phone number"
+        
+    def get_emails(self) -> str: 
+        if len(self.emails.all()) > 0:
+            emails = []
+            for email in self.emails.all():
+                emails.append(email.address)
+            return "\n".join(emails)
+        else:
+            return "No phone number"
+        
+    def get_domains(self) -> str: 
+        if len(self.domains.all()) > 0:
+            domains = []
+            for domain in self.domains.all():
+                domains.append(domain.name)
+            return "\n".join(domains)
+        else:
+            return "No phone number"
     
+    
+    def get_social_medias(self) -> str: 
+        if len(self.social_medias.all()) > 0:
+            social_medias = []
+            for social_media in self.social_medias.all():
+                social_medias.append(str(social_media))
+            return "\n".join(social_medias)
+        else:
+            return "No phone number"
+
     def get_cnpj(self):
         return remove_non_numeric(self.cnpj)
 
@@ -331,14 +364,6 @@ class Business(models.Model):
     def business_type(self):
         business = random.choice(["negócio", "estabelecimento"])
         message = f"do seu {business}"
-        
-        if self.name and self.instagram_username:
-            if has_string_in_list("pizza", [self.name, self.instagram_username]):
-                message = "da sua pizzaria"
-            elif has_string_in_list("hambúrguer", [self.name, self.instagram_username]):
-                message = "da sua hamburgueria"
-            elif has_string_in_list("restaurante", [self.name, self.instagram_username]):
-                message = "do seu restaurante"
             
         return message
     
@@ -364,18 +389,28 @@ class Business(models.Model):
         else:
             return None
     
-    def get_names(self):
+    def get_names(self) -> str:
         names = []
         names.append(self.name or "")
         names.append(self.name2 or "")
         
-        if not (self.name and self.name2):
-            names.append(self.instagram_username or self.facebook_username or "")
         return "\n".join(names)
     
+    def get_name(self) -> str:
+        name = ""
+        
+        if self.name2:
+            name = self.name2
+        elif self.name:
+            name = self.name
+        else:
+            name = f"Business {self.id}"
+        
+        return name
+    
     def __str__(self):
-        if self.instagram_username: return self.instagram_username
-        else: return f"Instagram {self.id}"
+        return self.get_name()
+
     class Meta:
         verbose_name = "Business"
         verbose_name_plural = "Business"
@@ -446,14 +481,66 @@ class Website(models.Model):
     social_media = models.BooleanField(default=False)
     ignore = models.BooleanField(default=False)
 
+class Domain(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    # http_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    connection_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("ok", "OK"),
+            ("dns_error", "DNS Error"),
+            ("connection_error", "Connection Error"),
+            ("timeout", "Timeout"),
+            ("ssl_error", "SSL Error"),
+        ],
+        null=True,
+        blank=True,
+    )
+
+    last_check = models.DateTimeField(null=True, blank=True)
+
+    is_https = models.BooleanField(default=False)
+
+    is_active = models.BooleanField(default=True)
+    is_banned = models.BooleanField(default=False)
+
+    observation = models.TextField(max_length=1000, null=True, blank=True)
+
+    def get_url(self) -> str:
+        protocol = "https" if self.is_https else "http"
+        return f"{protocol}://{self.name}"
+
+    def __str__(self):
+        return f"{self.get_url()} | {self.get_connection_status_display()}"
+
+class Email(models.Model):
+    address = models.EmailField(unique=True)
+    last_check = models.DateTimeField(null=True, blank=True)
+    is_accounting = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("unknown", "Unknown"),
+            ("valid", "Valid"),
+            ("invalid", "Invalid"),
+            ("risky", "Risky"),
+        ],
+        default="unknown"
+    )
+
+    def __str__(self):
+        return f"{self.address}"
+
 SOCIAL_MEDIA_CATEGORIES = [
     ("1", "instagram"),
     ("2", "facebook"),
     ("3", "linkedin"),
     ("4", "x"),
+    ("5", "tiktok"),
 ]
 class SocialMedia(models.Model):
-    username = models.CharField(max_length=30)
+    username = models.CharField(max_length=50)
     category = models.CharField(max_length=1, null=True, blank=True, choices=SOCIAL_MEDIA_CATEGORIES)
     is_active = models.BooleanField(null=True, blank=True)
     observation = models.TextField(max_length=1000, null=True, blank=True)
@@ -461,11 +548,11 @@ class SocialMedia(models.Model):
     class Meta:
         unique_together = ("username", "category")
 
-    def get_link(self) -> str:
+    def get_url(self) -> str:
         return "https://"
     
     def __str__(self):
-        return f"{self.username} {self.category}"
+        return f"{self.username} [{self.get_category_display()}]"
 
 
 class PhoneNumber(models.Model):
@@ -578,12 +665,26 @@ class VacancyCategory(models.Model):
         return self.name
 
 class Template(models.Model):
-    name = models.CharField(max_length=50, null=True, blank=True)
-    message = models.TextField(max_length=1200, null=True, blank=True)
+    name = models.CharField(max_length=100, null=True, blank=True)
+    subject = models.CharField(max_length=100, null=True, blank=True)
+    message = models.TextField(max_length=2000, null=True, blank=True)
     
     def __str__(self):
         return self.name
     
+class Tag(models.Model):
+    title = models.CharField(max_length=20)
+    
+    def __str__(self):
+        return self.title
+    
+class SubTag(models.Model):
+    title = models.CharField(max_length=20)
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
+    
+    def __str__(self):
+        return self.title
+
 class Curriculum(models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     file = models.FileField(upload_to=None, max_length=100)

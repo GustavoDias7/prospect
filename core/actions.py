@@ -9,7 +9,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 import urllib.parse
 import requests
-from prospect.utils import (get_phone, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_string_in_list, is_multiple_of, remove_non_numeric, parse_phone, open_whatsapp_sidebar, get_whatsapp_sidebar_data)
+from prospect.utils import (get_phone, get_phones, get_phones_web, get_emails, extract_social_usernames, choice_items, is_telephone, is_cellphone, open_tab, close_tab, selenium_click, try_while, save_cookies, load_cookies, log_link, has_substrings_in_strings, is_multiple_of, remove_non_numeric, parse_phone, open_whatsapp_sidebar, get_whatsapp_sidebar_data, open_image)
 from prospect.constants import Colors, COMMENTS
 from . import models
 from datetime import datetime, timedelta
@@ -24,6 +24,8 @@ import cv2
 from tkinter import Tk, Label
 from PIL import Image, ImageTk
 from django.db import IntegrityError
+from django.core.mail import EmailMultiAlternatives
+from django.template import Context, Template
 
 @admin.action(description="Get data from the Facebook page", permissions=["change"])
 def get_datas(modeladmin, request, queryset):
@@ -374,7 +376,7 @@ def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business])
         if buttons:
             for button in buttons:
                 outer_text = button.get_attribute("outerText")
-                if has_string_in_list((" + ", " and "), [outer_text]):
+                if has_substrings_in_strings([" + ", " and "], outer_text):
                     button.click()
                     time.sleep(0.5)
                     break
@@ -598,7 +600,7 @@ def get_instagram_data(modeladmin, request, queryset: QuerySet[models.Business])
                         for role_button in role_buttons:
                             title_attr = role_button.get_attribute("title")
                             terms = ("Profile details", "Dados do perfil")
-                            if has_string_in_list(title_attr, terms):
+                            if has_substrings_in_strings(terms, title_attr):
                                 driver.execute_script("arguments[0].click();", role_button)
                                 
                                 try:
@@ -1643,9 +1645,9 @@ def test_selenium_session(modeladmin, request, queryset: QuerySet[models.Busines
                         title_attr = role_button.get_attribute("title")
                         if len(title_attr) == 0: continue
                         terms = ("Profile details", "Dados do perfil")
-                        if has_string_in_list(title_attr, terms):
+                        if has_substrings_in_strings(terms, title_attr):
                             driver.execute_script("arguments[0].click();", role_button)
-                            # role_button.click()
+                            role_button.click()
                             
                             try:
                                 address = driver.find_element(By.CSS_SELECTOR, "a[href*='maps.google.com']")
@@ -1807,8 +1809,8 @@ def consult_cnpj_api(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
         elif res2.status_code == 200:
             data = res2.json()
 
-        print("status_code: ", res1.status_code, url1)
-        print("status_code: ", res2.status_code, url2)
+        # print("status_code: ", res1.status_code, url1)
+        # print("status_code: ", res2.status_code, url2)
 
         if not data:
             return
@@ -1845,18 +1847,44 @@ def consult_cnpj_api(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
 
         telefones = data.get("telefones", [])
         for telefone in telefones:
+            phone_number = models.PhoneNumber()
+            phone_number.country_code = "55"
+            phone_number.ddd = str(int(telefone.get("ddd")))
+            phone_number.number = telefone.get("numero")
+            phone_number.generation_type = "phone_number_from_cnpj_api"
+
             try:
-                phone_number = models.PhoneNumber()
-                phone_number.country_code = "55"
-                phone_number.ddd = str(int(telefone.get("ddd")))
-                phone_number.number = telefone.get("numero")
                 phone_number.save()
                 query.phone_numbers.add(phone_number)
             except IntegrityError as e: # alwady exist
-                print(e)
+                print(telefone, e)
+                phone_number = models.PhoneNumber.objects.get(
+                    country_code="55",
+                    ddd=str(int(telefone.get("ddd"))),
+                    number=telefone.get("numero"),
+                )
+                query.phone_numbers.add(phone_number)
 
-        if not query.email:
-            query.email = str(data.get("email", "")).lower()
+        cnpj_email = data.get("email", "").lower()
+        if cnpj_email:
+            contab_terms = ["contabilidade", "contador", "contab"]
+            # if contab email
+            is_accounting = has_substrings_in_strings(
+                substrings=contab_terms,
+                strings=cnpj_email
+            )
+            try:
+                email = models.Email(address=cnpj_email)
+                email.is_accounting=is_accounting
+                email.save()
+                query.emails.add(email)
+            except IntegrityError as e:
+                print(cnpj_email, e)
+                email = models.Email.objects.get(address=cnpj_email)
+                email.is_accounting=is_accounting
+                email.save()
+                query.emails.add(email)
+
 
         query.registration_status = data.get("situacao_cadastral", "")
         
@@ -1909,7 +1937,7 @@ def update_to_flagged(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[
         query.qualified = None
         query.save()
 
-@admin.action(description="Check WhatsApp and generate number", permissions=["change"])
+@admin.action(description="Check WhatsApp state", permissions=["change"])
 def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
     options = Options()
     options.add_argument("--headless")
@@ -1927,7 +1955,7 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
         path = os.path.join(screenshot_temp_path, filename)
         return path
     
-    def open_image(name: str) -> Tk: 
+    def open_image(name: str, driver: webdriver.Firefox) -> Tk: 
         root = Tk()
         root.geometry("1300x800+0+0")
         path = get_path(name)
@@ -1983,7 +2011,7 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
                         result = True
                         print("phone_number:", phone_number)
                     terms = ("Profile details", "Dados do perfil")
-                    if has_string_in_list(terms, [body_html]):
+                    if has_substrings_in_strings(terms, body_html):
                         print("Registered!")
 
                         open_whatsapp_sidebar(driver)
@@ -2149,3 +2177,182 @@ def whatsapp_checker(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[m
 
     driver.close()
     
+@admin.action(description="Check Website for contacts", permissions=["change"])
+def website_checker(modeladmin: admin.ModelAdmin, req, queryset: QuerySet[models.Business]):
+    options = Options()
+    options.add_argument("--headless")
+    profile_path = os.path.join(
+        settings.FIREFOX_PROFILE_PATH,
+        settings.FIREFOX_PROFILE_NAME
+    )
+    options.profile = profile_path
+    is_driver = False
+    driver = None
+    root = None
+
+    for index, query in enumerate(queryset):
+        print("=============================")
+        print(f"[{query.id}] {index + 1} of {len(queryset)}")
+
+        domains = query.domains.all()
+        domain_email_banned = models.Domain.objects.filter(is_banned=True)
+        if len(domains):
+            if not is_driver:
+                driver = webdriver.Firefox(options=options)
+                is_driver = True
+            
+            for domain in domains:
+                print(domain.get_url())
+
+                if "linkedin" in domain.get_url():
+                    continue
+
+                try:
+                    driver.get(domain.get_url())
+                    
+                    current_url = driver.current_url
+
+                    if "about:neterror" in current_url:
+                        parsed = urllib.parse.urlparse(current_url)
+                        error = urllib.parse.parse_qs(parsed.query).get("e", [""])[0]
+
+                        mapping = {
+                            "dnsNotFound": "dns_error",
+                            "connectionRefused": "connection_error",
+                            "timeout": "timeout",
+                            "sslError": "ssl_error",
+                        }
+
+                        domain.connection_status = mapping.get(error, "connection_error")
+                        domain.save()
+                    else:
+                        domain.connection_status = "ok"
+                        is_https = "https://" in driver.current_url
+                        domain.is_https = is_https
+                        domain.last_check = timezone.now()
+                        domain.save()
+                        # root = open_image("initial_screenshot", driver)
+                        time.sleep(5)
+                        
+                        # root.destroy()
+                        # root = open_image("after_5s_screenshot", driver)
+
+                        body = driver.find_element(By.TAG_NAME, "body")
+                        if body:
+                            body_html = body.get_attribute("innerHTML")
+
+                            # find phone number 
+                            phone_numbers = get_phones_web(body)
+                            print(phone_numbers)
+                            for phone_number_web in phone_numbers:
+                                
+                                parsed_phone = parse_phone(phone_number_web)
+
+                                phone_number = models.PhoneNumber()
+                                phone_number.country_code = parsed_phone.get("country_code")
+                                phone_number.ddd = parsed_phone.get("ddd")
+                                phone_number.number = parsed_phone.get("number")
+                                phone_number.generation_type = "phone_number_from_website_checker"
+
+                                try:
+                                    phone_number.save()
+                                    query.phone_numbers.add(phone_number)
+                                except IntegrityError as e:
+                                    print(phone_number_web, e)
+                                    phone_number = models.PhoneNumber.objects.get(
+                                        country_code = parsed_phone.get("country_code"),
+                                        ddd = parsed_phone.get("ddd"),
+                                        number = parsed_phone.get("number"),
+                                    )
+                                    query.phone_numbers.add(phone_number)
+                                
+                            # find e-mail address
+                            emails = get_emails(body_html)
+                            print(emails)
+                            for email_web in emails:
+                                email = models.Email(
+                                    address=email_web,
+                                )
+                                try:
+                                    email.save()
+                                    query.emails.add(email)
+                                except IntegrityError as e:
+                                    print(email_web, e)
+                                    email = models.Email.objects.get(
+                                        address=email_web,
+                                    )
+                                    query.emails.add(email)
+
+                            social_medias = extract_social_usernames(body_html)
+                            print(social_medias)
+                            for social_media_type in social_medias:
+                                for username in social_medias[social_media_type]:
+                                    category = ""
+                                    if social_media_type == "linkedin":
+                                        category = "3"
+                                    elif social_media_type == "instagram":
+                                        category = "1"
+                                    elif social_media_type == "facebook":
+                                        category = "2"
+
+                                    social_media = models.SocialMedia(
+                                        username=username,
+                                        category=category
+                                    )
+                                    try:
+                                        social_media.save()
+                                        query.social_medias.add(social_media)
+                                    except IntegrityError as e:
+                                        print(username, category, e)
+                                        social_media = models.SocialMedia.objects.get(
+                                            username=username,
+                                            category=category
+                                        )
+                                        query.social_medias.add(social_media)
+                except Exception as e:
+                    print("DNS or connection error")
+                    domain.connection_status = "connection_error"
+                    domain.status_code = None
+                    domain.save()
+
+                
+                # root.destroy()
+
+
+@admin.action(description="Send cover letter", permissions=["change"])
+def send_cover_letter(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
+    for index, query in enumerate(queryset):
+        print("=============================")
+        print(f"[{query.id}] {index + 1} of {len(queryset)}")
+        context = Context({'business': query})
+        template_message = Template(query.template.message, True)
+        rendered_template_message = template_message.render(context)
+        template_subject = Template(query.template.subject, True)
+        rendered_template_subject = template_subject.render(context)
+        print(
+            rendered_template_message,
+            rendered_template_subject
+        )
+        
+        msg = EmailMultiAlternatives(
+            subject=query.template.subject,
+            body="",
+            from_email="sitegustavodias@gmail.com",
+            to=["gustavo7dias@gmail.com"],
+            # headers={"List-Unsubscribe": "<mailto:unsub@example.com>"},
+        )
+
+        # Lastly, attach the HTML content to the email instance and send.
+        msg.attach_alternative(rendered_template_message, "text/html")
+        msg.send()
+
+ 
+# @admin.action(description="Genrate Tag", permissions=["change"])
+# def send_cover_letter(modeladmin: admin.ModelAdmin, request, queryset: QuerySet[models.Business]):
+#     for index, query in enumerate(queryset):
+#         print("=============================")
+#         print(f"[{query.id}] {index + 1} of {len(queryset)}")
+#         subtags = models.SubTag.objects.all().values_list("id", "title")
+#         has_substrings_in_strings(
+#             substrings=
+#         )

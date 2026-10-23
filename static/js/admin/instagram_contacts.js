@@ -1,5 +1,19 @@
 window.addEventListener("load", function () {
   (function ($) {
+    async function copyHTML({
+      button_id = "",
+      element_id = "",
+    }) {
+      const button = document.getElementById(button_id);
+      
+      button.addEventListener("click", async (event) => {
+        const element = document.getElementById(element_id);
+        const blob = new Blob([element.outerHTML], { type: "text/html" });
+        const data = [new ClipboardItem({ "text/html": blob })];
+        event.preventDefault();
+        await navigator.clipboard.write(data);
+      })
+    }
     function counterCharacters(fieldId) {
       if ($(`#${fieldId}`).length) {
         html = `<div class='help' id='${fieldId}-counter'>Characters: <span></span> of <span></span></div>`;
@@ -12,10 +26,21 @@ window.addEventListener("load", function () {
           $(`#${fieldId}`).attr("maxlength")
         );
 
+        if ($(`#${fieldId}`).val().length > $(`#${fieldId}`).attr("maxlength")) {
+          $($(`#${fieldId}-counter`)).attr('style', 'color: red;');
+        } else {
+          $($(`#${fieldId}-counter`)).attr('style', null);
+        }
+
         $(`#${fieldId}`).on("input", function (event) {
           $(`#${fieldId}-counter span:first-of-type`).text(
             `${event.target.value.length}`
           );
+          if ($(`#${fieldId}`).val().length > $(`#${fieldId}`).attr("maxlength")) {
+            $($(`#${fieldId}-counter`)).attr('style', 'color: red;');
+          } else {
+            $($(`#${fieldId}-counter`)).attr('style', null);
+          }
         });
       }
     }
@@ -120,10 +145,15 @@ window.addEventListener("load", function () {
       });
     }
 
+    copyHTML({
+      button_id: "copy-template-message",
+      element_id: "rendered-template-message",
+    })
+
     copy_field_value({
-      button_id: "copy-message",
-      field_id: "rendered-template",
-    });
+      button_id: "copy-template-subject",
+      field_id: "rendered-template-subject",
+    })
 
     copy_field_value({
       button_id: "id_name_copy",
@@ -252,27 +282,87 @@ window.addEventListener("load", function () {
       });
     });
 
+    $('#open-website').on('click', function (e) {
+      e.preventDefault();
+      let url = $("#id_website").val();
+      if (!url) return;
+      const has_protocol = url.includes("http://") || url.includes("https://");
+      if (!has_protocol) {
+        url = `https://${url}`;
+      }
+      window.open(url);
+    });
+
+    $('#open-website2').on('click', function (e) {
+      e.preventDefault();
+      let url = $("#id_website2").val();
+      if (!url) return;
+      const has_protocol = url.includes("http://") || url.includes("https://");
+      if (!has_protocol) {
+        url = `https://${url}`;
+      }
+      window.open(url);
+    });
+
     $('#open-website-whois').on('click', function (e) {
       e.preventDefault();
-      const url = $("#id_website").val();
+      let url = $("#id_website").val();
+      if (!url) return;
+      const has_protocol = url.includes("http://") || url.includes("https://");
+      if (!has_protocol) {
+        url = `https://${url}`;
+      }
       const domain = new URL(url).hostname;
       window.open(`https://registro.br/tecnologia/ferramentas/whois?search=${domain}`);
     });
 
     $('#open-website2-whois').on('click', function (e) {
       e.preventDefault();
-      const url = $("#id_website2").val();
+      let url = $("#id_website2").val();
+      if (!url) return;
+      const has_protocol = url.includes("http://") || url.includes("https://");
+      if (!has_protocol) {
+        url = `https://${url}`;
+      }
       const domain = new URL(url).hostname;
       window.open(`https://registro.br/tecnologia/ferramentas/whois?search=${domain}`);
+    });
+
+    $('#open-website-built-with').on('click', function (e) {
+      e.preventDefault();
+      const website = $("#id_website").val();
+      if (!website) return;
+      let url = website;
+      const has_protocol = website.includes("http://") || website.includes("https://");
+      if (!has_protocol) {
+        url = `https://${website}`;
+      }
+      console.log(url);
+      
+      const domain = new URL(url).hostname;
+      window.open(`https://builtwith.com/${domain}`);
+    });
+
+    $('#open-website2-built-with').on('click', function (e) {
+      e.preventDefault();
+      const website = $("#id_website2").val();
+      if (!website) return;
+      let url = website;
+      const has_protocol = website.includes("http://") || website.includes("https://");
+      if (!has_protocol) {
+        url = `https://${website}`;
+      }
+      const domain = new URL(url).hostname;
+      window.open(`https://builtwith.com/${domain}`);
     });
 
     $('#open-phone-number-whatsapp').on('click', function (e) {
       e.preventDefault();
       const selectedOptions = $("#id_phone_numbers_to, #id_phone_numbers_from").find('option:selected');
       selectedOptions.each(function () {
-        phone_number = $(this).text();
+        let phone_number = $(this).text();
         phone_number = phone_number.replace(/\D/g, "");
-        whatsapp_link = `https://web.whatsapp.com/send/?phone=${phone_number}`
+        const whatsapp_link = `https://web.whatsapp.com/send/?phone=${phone_number}`
         window.open(whatsapp_link, '_blank');
       });
     });
@@ -321,6 +411,104 @@ window.addEventListener("load", function () {
         phone_number = phone_number.replace(/\D/g, "");
         phone_number = `021${phone_number}`;
         navigator.clipboard.writeText(phone_number);
+      });
+    });
+
+    $('#open-domain').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_domains_to, #id_domains_from").find('option:selected');
+      selectedOptions.each(function () {
+        window.open(`/admin/core/domain/${$(this).val()}/change/`, '_blank');
+      });
+    });
+
+    $('#open-url').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_domains_to, #id_domains_from").find('option:selected');
+      selectedOptions.each(function () {
+        const url = $(this).text().split(" | ")[0];
+        window.open(url, '_blank');
+      });
+    });
+    
+    $('#copy-url').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_domains_to, #id_domains_from").find('option:selected');
+      selectedOptions.each(function () {
+        const url = $(this).text().split(" | ")[0];
+        navigator.clipboard.writeText(url);
+      });
+    });
+    
+    $('#copy-url-domain').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_domains_to, #id_domains_from").find('option:selected');
+      selectedOptions.each(function () {
+        const url = $(this).text().split(" | ")[0];
+        const domain = new URL(url).hostname;
+        navigator.clipboard.writeText(domain);
+      });
+    });
+
+    $('#open-email').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_emails_to, #id_emails_from").find('option:selected');
+      selectedOptions.each(function () {
+        window.open(`/admin/core/email/${$(this).val()}/change/`, '_blank');
+      });
+    });
+
+    $('#copy-email').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_emails_to, #id_emails_from").find('option:selected');
+      selectedOptions.each(function () {
+        const email = $(this).text();
+        navigator.clipboard.writeText(email);
+      });
+    });
+    
+    $('#copy-email-domain').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_emails_to, #id_emails_from").find('option:selected');
+      selectedOptions.each(function () {
+        const domain = $(this).text().split("@")[1];
+        navigator.clipboard.writeText(domain);
+      });
+    });
+    
+    $('#open-email-domain').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_emails_to, #id_emails_from").find('option:selected');
+      selectedOptions.each(function () {
+        const domain = $(this).text().split("@")[1];
+        const url = `http://${domain}`;
+        window.open(url, '_blank');
+      });
+    });
+
+    $('#open-social-media').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_social_medias_to, #id_social_medias_from").find('option:selected');
+      selectedOptions.each(function () {
+        window.open(`/admin/core/socialmedia/${$(this).val()}/change/`, '_blank');
+      });
+    });
+    
+    $('#open-social-media-link').on('click', function (e) {
+      e.preventDefault();
+      const selectedOptions = $("#id_social_medias_to, #id_social_medias_from").find('option:selected');
+      selectedOptions.each(function () {
+        let social_media = $(this).text();
+        let url = ""
+        social_media = social_media.split(" ");
+        
+        if (social_media[1] === "[instagram]") url = `https://instagram.com/${social_media[0]}`
+        else if (social_media[1] === "[facebook]") url = `https://facebook.com/${social_media[0]}`
+        else if (social_media[1] === "[linkedin]") url = `https://www.linkedin.com/company/${social_media[0]}`
+        else if (social_media[1] === "[x]") url = `https://x.com/${social_media[0]}`
+        else if (social_media[1] === "[tiktok]") url = `https://tiktok.com/${social_media[0]}`
+        
+        window.open(url, '_blank');
       });
     });
 
@@ -390,5 +578,34 @@ window.addEventListener("load", function () {
           $("#id_secondary_color_preview").css("background-color", value);
       });
     }
+
+    $("#copy-email-interaction-data").on("click", function (e) {
+        e.preventDefault();
+        const now = new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "America/Sao_Paulo",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }).format(new Date());
+        const email = $('#selected_email').find(":selected").text();;
+        const subject = $('#rendered-template-subject').text();
+        navigator.clipboard.writeText(`Date: ${now}\nE-mail to: ${email}\nSubject: ${subject}`);
+    });
+
+    $("#send-email").on("click", function (e) {
+      if ($(this).attr('type') === 'button') {
+        e.preventDefault();
+      }
+
+      $(this).attr('type', 'submit');
+      $(this).css('background-color', '#ba7d21');
+      setTimeout(() => {
+        $(this).attr('type', 'button');
+        $(this).css('background-color', '');
+      }, 3000);
+    });
   })(django.jQuery);
 });

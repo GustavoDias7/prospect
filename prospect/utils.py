@@ -1,11 +1,13 @@
+from core import models
 import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 import time
-from PIL import Image, ImageFont, ImageDraw
+from PIL import Image, ImageFont, ImageDraw, ImageTk
 import json, os
-from prospect.constants import BOLD_MAP
+from prospect.constants import BOLD_MAP, DDD
+from prospect.regex import EMAIL_PATTERN, PHONE_PATTERNS, MASKED_PHONE_PATTERNS
 import random
 from io import BytesIO
 import cairosvg
@@ -16,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from django.utils.translation import gettext_lazy as _
 import cv2
 import urllib.parse
+from tkinter import Tk, Label
 
 @audio_video_fx
 def audio_normalize(clip: AudioFileClip):
@@ -114,6 +117,71 @@ def get_phone(value: str) -> str:
     
     return phone
 
+def get_phones(value: str) -> list[str]:
+    phones = []
+    text = value
+
+    for pattern in PHONE_PATTERNS:
+        while True:
+            match = re.search(pattern, text)
+            if not match:
+                break
+
+            phone = match.group()
+            clean = remove_non_numeric(phone)
+            if (is_landline(clean) or is_mobile(clean)):
+                phones.append(clean)
+
+            # remove matched part to avoid overlap
+            start, end = match.span()
+            text = text[:start] + " " * (end - start) + text[end:]
+
+    # remove duplicates
+    return list(dict.fromkeys(phones))
+
+def get_emails(text: str) -> list[str]:
+    return list(dict.fromkeys(
+        re.findall(EMAIL_PATTERN, text, re.IGNORECASE)
+    ))
+
+# get phones for patterns in html web pages
+def get_phones_web(element: WebElement) -> list[str]:
+    phones = []
+    text = element.get_attribute("innerHTML")
+
+    for pattern in MASKED_PHONE_PATTERNS:
+        while True:
+            match = re.search(pattern, text)
+            if not match:
+                break
+
+            phone = match.group()
+
+            if "%" in phone:
+                break
+
+            clean = remove_non_numeric(phone)
+            if (is_landline(clean) or is_mobile(clean)):
+                phones.append(clean)
+
+            # remove matched part to avoid overlap
+            start, end = match.span()
+            text = text[:start] + " " * (end - start) + text[end:]
+
+    # website
+    whatsapp_websites = models.Website.objects.filter(whatsapp=True)
+    a_tags = element.find_elements(By.CSS_SELECTOR, "a")
+    for a_tag in a_tags:
+        a_href = a_tag.get_attribute("href")
+        if a_href:
+            for ws in whatsapp_websites:
+                if ws.website in a_href or ("tel:" in a_href):
+                    phone = get_phone(a_href)
+                    phones.append(phone)
+
+    # remove duplicates
+    return list(dict.fromkeys(phones))
+
 def replace_accents(new_string_com_acento: str) -> str:
     string = new_string_com_acento
     mapa_acentos_hex = {
@@ -138,33 +206,49 @@ def replace_accents(new_string_com_acento: str) -> str:
     
     return string
 
-def has_string_in_list(string: str | list[str], string_list: list[str], case_sensitive: bool = False) -> bool:
-    result = False
-    strings = []
-    
-    if type(string) == str and len(string):
-        strings.append(string)
-    elif all(isinstance(s, str) for s in string):
-        strings.extend(string)
-    
-    for item in string_list:
-        norm_item = replace_accents(item)
-        
-        for curr_string in strings:
-            norm_string = replace_accents(curr_string)
-            
-            if case_sensitive == False:
-                norm_item = norm_item.lower()
-                norm_string = norm_string.lower()
-            
-            if norm_string in norm_item:
-                result = True
-                break
-        
-        if result:
-            break
-    
-    return result
+# check if each substring is in each full strings
+def has_substrings_in_strings(
+    substrings: str | list[str],
+    strings: str | list[str],
+    case_sensitive: bool = False,
+    normalize: bool = True
+) -> bool:
+
+    # normalize inputs
+    if isinstance(substrings, str):
+        substring_list = [substrings] if substrings else []
+    elif isinstance(substrings, list):
+        substring_list = [s for s in substrings if isinstance(s, str)]
+    else:
+        substring_list = []
+
+    if isinstance(strings, str):
+        string_list = [strings] if strings else []
+    elif isinstance(strings, list):
+        string_list = [s for s in strings if isinstance(s, str)]
+    else:
+        string_list = []
+
+    # helper normalization function
+    def norm(s: str) -> str:
+        if normalize:
+            s = replace_accents(s)
+        if not case_sensitive:
+            s = s.lower()
+        return s
+
+    # preprocess substrings once
+    norm_substrings = [norm(sub) for sub in substring_list]
+
+    # check
+    for string in string_list:
+        norm_string = norm(string)
+
+        for sub in norm_substrings:
+            if sub in norm_string:
+                return True
+
+    return False
 
 def has_term(term: str, terms: list | tuple, case_sensitive: bool = False) -> bool:
     def handle_lower(value):
@@ -182,15 +266,38 @@ def is_cellphone(value: str) -> bool:
     number = remove_non_numeric(value)
     return len(number) in (9, 11, 13) and number[-9] == "9"
 
-def open_tab(driver: webdriver.Firefox, search: str, index_tab: int, sleep: int | None = None):
-    driver.execute_script("window.open('');")
-    driver.switch_to.window(driver.window_handles[index_tab])
-    driver.get(search)
-    if type(sleep) == int: time.sleep(sleep)
-    
-def close_tab(driver: webdriver.Firefox, index_tab: int):
-    driver.close()
-    driver.switch_to.window(driver.window_handles[index_tab])
+def is_landline(value: str) -> bool:
+    if value == None: return False
+    number = remove_non_numeric(value)
+    if len(number) == 8:
+        return True
+    elif len(number) == 10:
+        is_ddd = number[0:2] in DDD
+        return is_ddd
+    elif len(number) == 12:
+        is_br_code = number[0:2] == "55"
+        is_ddd = number[2:4] in DDD
+        return is_br_code and is_ddd
+    else:
+        return False
+
+def is_mobile(value: str) -> bool:
+    if value == None: return False
+    number = remove_non_numeric(value)
+
+    if len(number) >= 9 and number[-9] != "9":
+        return False
+    elif len(number) == 9:
+        return True
+    elif len(number) == 11:
+        is_ddd = number[0:2] in DDD
+        return is_ddd
+    elif len(number) == 13:
+        is_br_code = number[0:2] == "55"
+        is_ddd = number[2:4] in DDD
+        return is_br_code and is_ddd
+    else:
+        return False
 
 # times = 1
 def try_while(
@@ -680,7 +787,70 @@ def show_image(path):
     cv2.waitKey(1)  # waits until you press a key
     cv2.destroyAllWindows()
 
+def extract_social_usernames(text: str):
+    data = {
+        "linkedin": [],
+        "instagram": [],
+        "facebook": []
+    }
+
+    # LinkedIn
+    linkedin_pattern = r'(?:https?://)?(?:[\w]+\.)?linkedin\.com/company/([\w\-\.]+)'
+    
+    # Instagram
+    instagram_pattern = r'(?:https?://)?(?:www\.)?instagram\.com/([\w\._]+)'
+    
+    # Facebook
+    facebook_pattern = r'(?:https?://)?(?:www\.)?facebook\.com/([\w\.]+)'
+
+    ig_blacklist = {'p', 'reel', 'stories', 'explore', 'accounts', 'tv', 'policies'}
+    fb_blacklist = {'pages', 'groups', 'events', 'marketplace', 'watch', 'login', 'share', 'tr', 'sharer'}
+
+    # Extract
+    data["linkedin"] = list(set(re.findall(linkedin_pattern, text)))
+
+    data["instagram"] = list({
+        u for u in re.findall(instagram_pattern, text)
+        if u.lower() not in ig_blacklist
+    })
+
+    data["facebook"] = list({
+        u for u in re.findall(facebook_pattern, text)
+        if u.lower() not in fb_blacklist
+    })
+
+    return data
+
+def get_path(name) -> dict:
+        screenshot_temp_path = "temp"
+        file_ext = ".png"
+        filename = f"{name}{file_ext}"
+        path = os.path.join(screenshot_temp_path, filename)
+        return path
+
+def open_image(name: str, driver: webdriver.Firefox) -> Tk: 
+    root = Tk()
+    root.geometry("1300x800+0+0")
+    path = get_path(name)
+    driver.save_screenshot(path)
+    img = Image.open(path)
+    img = ImageTk.PhotoImage(img)
+    label = Label(root, image=img)
+    label.pack()
+    root.update()
+    return root
+
 # selenium utils
+
+# open a new tab and search on tab
+def open_tab(driver: webdriver.Firefox, search: str, index_tab: int = 0):
+    driver.execute_script("window.open('');")
+    driver.switch_to.window(driver.window_handles[index_tab])
+    driver.get(search)
+    
+def close_tab(driver: webdriver.Firefox, index_tab: int):
+    driver.close()
+    driver.switch_to.window(driver.window_handles[index_tab])
 
 def selenium_click(driver: webdriver.Firefox, element: WebElement, sleep: int | None = None):
     driver.execute_script("arguments[0].click();", element)
@@ -694,9 +864,9 @@ def open_whatsapp_sidebar(driver: webdriver.Firefox) -> webdriver.Firefox:
             for role_button in role_buttons:
                 title_attr = role_button.get_attribute("title")
                 terms = ("Profile details", "Dados do perfil")
-                if has_string_in_list(title_attr, terms):
-                    driver.execute_script("arguments[0].click();", role_button)
-                    break
+                # if has_string_in_list(title_attr, terms):
+                #     driver.execute_script("arguments[0].click();", role_button)
+                #     break
     except Exception as e:
         print(e)
         print("open_whatsapp_sidebar")
@@ -726,36 +896,4 @@ def get_whatsapp_sidebar_data(driver: webdriver.Firefox) -> dict:
 
     return result
 
-def extract_social_usernames(text: str):
-    data = {
-        "linkedin": [],
-        "instagram": [],
-        "facebook": []
-    }
 
-    # LinkedIn
-    linkedin_pattern = r'(?:https?://)?(?:[\w]+\.)?linkedin\.com/company/([\w\-\.]+)'
-    
-    # Instagram
-    instagram_pattern = r'(?:https?://)?(?:www\.)?instagram\.com/([\w\._]+)'
-    
-    # Facebook
-    facebook_pattern = r'(?:https?://)?(?:www\.)?facebook\.com/([\w\.]+)'
-
-    ig_blacklist = {'p', 'reel', 'stories', 'explore', 'accounts', 'tv'}
-    fb_blacklist = {'pages', 'groups', 'events', 'marketplace', 'watch', 'login', 'share'}
-
-    # Extract
-    data["linkedin"] = list(set(re.findall(linkedin_pattern, text)))
-
-    data["instagram"] = list({
-        u for u in re.findall(instagram_pattern, text)
-        if u.lower() not in ig_blacklist
-    })
-
-    data["facebook"] = list({
-        u for u in re.findall(facebook_pattern, text)
-        if u.lower() not in fb_blacklist
-    })
-
-    return data

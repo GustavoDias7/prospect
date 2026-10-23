@@ -14,7 +14,7 @@ from PIL import Image, ImageFont, ImageDraw, ImageOps
 import requests
 from io import BytesIO
 import textwrap
-from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, group_horizontally, center_paste, get_dimentions, has_string_in_list, boldify, rounded_corners, generate_rectangle, audio_normalize, replace_accents, get_time_offset, get_phone, parse_phone
+from prospect.utils import resize_image, crop_horizontal_image, text_to_image, group_vertically, group_horizontally, center_paste, get_dimentions, has_substrings_in_strings, boldify, rounded_corners, generate_rectangle, audio_normalize, replace_accents, get_time_offset, get_phone, parse_phone
 from prospect.regex import WEBSITE_PATTERN
 import os
 from django.conf import settings
@@ -29,6 +29,7 @@ from datetime import datetime
 from django.utils import timezone
 from django.db import IntegrityError
 import locale 
+from django.core.mail import EmailMultiAlternatives
 
 # data, rate = sf.read("test.wav") # load audio (with shape (samples, channels))
 # meter = pyln.Meter(rate) # create BS.1770 meter
@@ -156,6 +157,7 @@ class InteractionAdmin(admin.ModelAdmin):
 
 class InteractionInline(admin.StackedInline):
     model = models.Interaction
+    min_num = 1
     extra = 0
     readonly_fields = ["date"]
     
@@ -181,7 +183,7 @@ class InteractFilter(admin.SimpleListFilter):
 @admin.register(models.Business)
 class BusinessAdmin(admin.ModelAdmin):
     list_filter = ["qualified", "archived", "registration_status", InteractFilter, "favorite", "legal_entity_type"]
-    list_display = ["id", "title", "phone_numbers_", "website_", "email_", "date_start_activity_", "registration_status_"]
+    list_display = ["id", "title", "phone_numbers_", "urls_", "emails_", "date_start_activity_", "registration_status_"]
     # list_editable = ('',)
     actions = [
         actions.get_instagram_data, 
@@ -194,18 +196,21 @@ class BusinessAdmin(admin.ModelAdmin):
         actions.consult_cnpj_api,
         actions.update_to_flagged,
         actions.whatsapp_checker,
+        actions.website_checker,
+        # actions.send_cover_letter
     ]
-    search_fields = ["id", "name", "name2", "cnpj", "cep", "address", "instagram_username", "website", "cellphone", "telephone"]
-    autocomplete_fields = ["template"]
+    search_fields = ["id", "name", "name2", "cnpj", "cep", "address", "instagram_username", "website", "cellphone", "telephone", "emails__address", "domains__name"]
+    autocomplete_fields = ["template", 'tags',]
     change_form_template = 'admin/businesscontact_change_form.html'
     change_list_template = 'admin/businesscontact_change_list.html'
-    filter_horizontal = ('staff_members', 'phone_numbers')
+    filter_horizontal = ('staff_members', 'phone_numbers', 'social_medias', 'domains', 'emails')
     form = forms.BusinessForm
     inlines = [InteractionInline]
     kanban_layout = False
     kanban_columns = {
         "flagged": {"verbose_name": "flagged", "max_length": None, "filter": "flagged_filter"},
         "qualified": {"verbose_name": "qualified", "max_length": None, "filter": "qualified_filter"},
+        "contacted": {"verbose_name": "contacted", "max_length": None, "filter": "contacted_filter"},
         "follow_up": {"verbose_name": "follow up", "max_length": None, "filter": "follow_up_filter"},
         "no_reply": {"verbose_name": "no reply", "max_length": None, "filter": "no_reply_filter"},
         "meeting": {"verbose_name": "meeting", "max_length": None, "filter": "meeting_filter"},
@@ -221,6 +226,12 @@ class BusinessAdmin(admin.ModelAdmin):
     def qualified_filter(self, response):
         qs = models.Interaction.objects
         qs = qs.filter(business__qualified=True, business__archived=False, status__name__in=("Not contacted", "Testing", "Flagged"))
+        qs = qs.order_by('-business__top', '-business_id')
+        return qs
+    
+    def contacted_filter(self, response):
+        qs = models.Interaction.objects
+        qs = qs.filter(business__qualified=True, business__archived=False, status__name__in=("Contacted",))
         qs = qs.order_by('-business__top', '-business_id')
         return qs
     
@@ -267,7 +278,7 @@ class BusinessAdmin(admin.ModelAdmin):
                 filter_name = objects.get("filter")
                 filter = getattr(self, filter_name)
                 objects["items"] = filter(response)
-        
+
         if request.method == "POST" and request.FILES.get("csv_file"):
             file = request.FILES["csv_file"]
             decoded = file.read().decode("utf-8").splitlines()
@@ -298,109 +309,50 @@ class BusinessAdmin(admin.ModelAdmin):
             return self.list_filter
     
     def response_change(self, request, obj: models.Business):
-        is_image = bool(request.POST.get("generate_image"))
-        print(is_image)
-        
-        if is_image and obj:
-            dimentions = get_dimentions("9:16", 1280, int)
-            img_desktop = Image.new("RGBA", (1280, 3961), "#ffffff")
-            loss = 1685
-            
-            old_primary_color = "#FF0000"
-            old_secondary_color = "#0059FF"
-            
-            svg_template = ""
-            if obj.custom_color:
-                with open(os.path.join(settings.BASE_DIR, "media", "desktop.svg")) as f:
-                    svg_template = f.read()
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.custom_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.custom_color)
-            elif (obj.primary_color and obj.secondary_color) and (obj.primary_color != obj.secondary_color):
-                with open(os.path.join(settings.BASE_DIR, "media", "desktop-1.svg")) as f:
-                    svg_template = f.read()
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
-                svg_template = svg_template.replace(old_secondary_color.upper(), obj.secondary_color)
-                svg_template = svg_template.replace(old_secondary_color.lower(), obj.secondary_color)
-            elif obj.primary_color or obj.secondary_color:
-                with open(os.path.join(settings.BASE_DIR, "media", "desktop.svg")) as f:
-                    svg_template = f.read()
-                color = obj.primary_color or obj.secondary_color
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
-                    
-            svg_template = svg_template.replace("Logotype", html.escape(obj.name))
-            if obj.cellphone:
-                svg_template = svg_template.replace("(21) 4002-8922", html.escape(obj.fcellphone()))
-            
-            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
-            background_template = Image.open(filelike_obj)
-            img_desktop.paste(background_template, (0, 0))
-            
-            frame1 = img_desktop.crop((0, 0, dimentions[0], dimentions[1]))
-            frame1_name = f'{obj.id}-frame-1.png'
-            frame1.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame1_name))
-            obj.image1 = os.path.join("business_contact", frame1_name)
+        if request.method == "POST" and request.POST.get("selected_email"):
+            try:
 
-            frame2 = img_desktop.crop((0, 0+loss, dimentions[0], dimentions[1]+loss))
-            frame2_name = f'{obj.id}-frame-2.png'
-            frame2.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame2_name))
-            obj.image2 = os.path.join("business_contact", frame2_name)
-            
-            img_cart = Image.new("RGBA", (360, 810), "#ffffff")
-            svg_template = ""
+                email_id = request.POST.get("selected_email")
+                member = request.POST.get("selected_member")
+
+                email = models.Email.objects.get(pk=email_id)
                 
-            if obj.custom_color:
-                with open(os.path.join(settings.BASE_DIR, "media", "cart-2.svg")) as f:
-                    svg_template = f.read()
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.custom_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.custom_color)
-            elif obj.primary_color and obj.secondary_color and (obj.primary_color != obj.secondary_color):
-                with open(os.path.join(settings.BASE_DIR, "media", "cart-1.svg")) as f:
-                    svg_template = f.read()
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
-                svg_template = svg_template.replace(old_secondary_color.upper(), obj.secondary_color)
-                svg_template = svg_template.replace(old_secondary_color.lower(), obj.secondary_color)
-            elif obj.primary_color or obj.secondary_color:
-                with open(os.path.join(settings.BASE_DIR, "media", "cart-2.svg")) as f:
-                    svg_template = f.read()
-                color = obj.primary_color or obj.secondary_color
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
-            
-            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
-            cart_template = Image.open(filelike_obj)
-            img_cart.paste(cart_template, (0, 0))
-            
-            frame3_name = f'{obj.id}-frame-3.png'
-            img_cart.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame3_name))
-            obj.image3 = os.path.join("business_contact", frame3_name)
-            
-            img_order = Image.new("RGBA", (1280, 1490), "#ffffff")
-            svg_template = ""
+                context = Context({'business': obj, 'selected_member': member, 'backend': True})
+                template_message = obj.template.message.replace("[[", "{{").replace("]]", "}}")
+                template_message = Template(template_message)
+                rendered_template_message = template_message.render(context)
+
+                template_subject = obj.template.subject.replace("[[", "{{").replace("]]", "}}")
+                template_subject = Template(template_subject)
+                rendered_template_subject = template_subject.render(context)
                 
-            if obj.custom_color:
-                with open(os.path.join(settings.BASE_DIR, "media", "order.svg")) as f:
-                    svg_template = f.read()
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.custom_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.custom_color)
-            elif obj.primary_color or obj.secondary_color:
-                with open(os.path.join(settings.BASE_DIR, "media", "order.svg")) as f:
-                    svg_template = f.read()
-                svg_template = svg_template.replace(old_primary_color.upper(), obj.primary_color)
-                svg_template = svg_template.replace(old_primary_color.lower(), obj.primary_color)
-            
-            svg_template = svg_template.replace("Logotype", html.escape(obj.name))
-            filelike_obj = BytesIO(cairosvg.svg2png(svg_template, background_color="#000"))
-            order_template = Image.open(filelike_obj)
-            img_order.paste(order_template, (0, 0))
-            
-            frame4_name = f'{obj.id}-frame-4.png'
-            img_order.save(os.path.join(settings.BASE_DIR, "media", "business_contact", frame4_name))
-            obj.image4 = os.path.join("business_contact", frame4_name)
-            
-            obj.save()
+                msg = EmailMultiAlternatives(
+                    subject=rendered_template_subject,
+                    body="",
+                    from_email=settings.EMAIL_HOST_USER,
+                    to=[email.address],
+                    # to=["gd216153@gmail.com"]
+                )
+                
+                interaction = obj.business_ref
+                contacted = models.InteractionStatus.objects.get(name="Contacted")
+                contact_via = models.InteractionContactVia.objects.get(name="E-mail")
+                interaction.status = contacted
+                interaction.contact_via = contact_via
+
+                if interaction.observation:
+                    interaction.observation += f"\n\n"
+                
+                interaction.observation += f"Date: {datetime.now()}\n"
+                interaction.observation += f"E-mail to: {email.address}\n"
+                interaction.observation += f"Subject: {rendered_template_subject}"
+                obj.business_ref.save()
+
+                msg.attach_alternative(rendered_template_message, "text/html")
+                msg.send()
+            except Exception as e:
+                print(e)
+
             return HttpResponseRedirect(request.get_full_path())
         
         return super().response_change(request, obj)
@@ -409,17 +361,24 @@ class BusinessAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         
         try:
-            business_contact = models.Business.objects.get(id=object_id)
-            extra_context["business_contact"] = business_contact
-            if business_contact.template:
-                template = Template(boldify(business_contact.template.message, True))
-                context = Context({'business_contact': business_contact})
-                rendered_content = template.render(context)
-                extra_context["template"] = rendered_content
+            business = models.Business.objects.get(id=object_id)
+            extra_context["business"] = business
+            if business.template:
+                context = Context({'business': business})
+                
+                template_message = Template(boldify(business.template.message, True))
+                rendered_template_message = template_message.render(context)
+                extra_context["template_message"] = rendered_template_message
+
+                template_subject = Template(boldify(business.template.subject, True))
+                rendered_template_subject = template_subject.render(context)
+                extra_context["template_subject"] = rendered_template_subject
             else:
-                extra_context["template"] = None
+                extra_context["template_message"] = None
+                extra_context["template_subject"] = None
         except ObjectDoesNotExist:
-            extra_context["template"] = None
+            extra_context["template_message"] = None
+            extra_context["template_subject"] = None
         
         
         return super().change_view(
@@ -455,7 +414,7 @@ class BusinessAdmin(admin.ModelAdmin):
                 html4 = "<a href='/' id='id_name2_copy'>Copy</a>"
                 href5 = f"https://www.google.com/search?q={obj.name2}"
                 html5 = f'<a href="{href5}" target="_blank">Google</a>'
-                href6 = f"https://www.google.com/search?q={obj.name} LinkedIn"
+                href6 = f"https://www.google.com/search?q={obj.name2} LinkedIn"
                 html6 = f'<a href="{href6}" target="_blank">Google LinkedIn</a>'
                 html = " | ".join([html1, html2, html5, html6, html3, html4])
                 help_texts["help_texts"].update({"name2": mark_safe(html)})
@@ -571,18 +530,18 @@ class BusinessAdmin(admin.ModelAdmin):
                 html = " | ".join([html1, html2, html3])
                 help_texts["help_texts"].update({"address2": mark_safe(html)})
 
-            if obj.website:
+            if True:
+                html3 = f'<a href="/" id="open-website" target="_blank">Open website</a>'
                 html1 = f'<a href="/" id="open-website-whois" target="_blank">Open Whois</a>'
-                domain = urllib.parse.urlparse(obj.website).netloc
-                html2 = f'<a href="https://builtwith.com/{domain}" target="_blank">Built With</a>'
-                html = " | ".join([html1, html2])
+                html2 = f'<a href="/" id="open-website-built-with" target="_blank">Built With</a>'
+                html = " | ".join([html3, html1, html2])
                 help_texts["help_texts"].update({"website": mark_safe(html)})
 
-            if obj.website2:
+            if True:
+                html3 = f'<a href="/" id="open-website" target="_blank">Open website</a>'
                 html1 = f'<a href="/" id="open-website2-whois" target="_blank">Open Whois</a>'
-                domain = urllib.parse.urlparse(obj.website2).netloc
-                html2 = f'<a href="https://builtwith.com/{domain}" target="_blank">Built With</a>'
-                html = " | ".join([html1, html2])
+                html2 = f'<a href="/" id="open-website2-built-with" target="_blank">Built With</a>'
+                html = " | ".join([html3, html1, html2])
                 help_texts["help_texts"].update({"website2": mark_safe(html)})
                 
             if obj.staff_members:
@@ -628,6 +587,56 @@ class BusinessAdmin(admin.ModelAdmin):
                 html = " ".join([html1, html2, html3, html4, html5, html6])
                 html_wrapper = f'<div style="{style_wrapper}">{html}</div>'
                 help_texts["help_texts"].update({"phone_numbers": mark_safe(html_wrapper)})
+
+            if obj.domains:
+                inner_text1 = "Open Domain"
+                inner_text2 = "Open URL"
+                inner_text3 = "Copy URL"
+                inner_text4 = "Copy domain"
+                # style = "display: block; margin: 0px auto 8px;"
+                style_wrapper = "display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: center;"
+                id1 = "open-domain"
+                id2 = "open-url"
+                id3 = "copy-url"
+                id4 = "copy-url-domain"
+                html1 = f'<button id="{id1}" type="button" class="button">{inner_text1}</button>'
+                html2 = f'<button id="{id2}" type="button" class="button">{inner_text2}</button>'
+                html3 = f'<button id="{id3}" type="button" class="button">{inner_text3}</button>'
+                html4 = f'<button id="{id4}" type="button" class="button">{inner_text4}</button>'
+                html = " ".join([html1, html2, html3, html4])
+                html_wrapper = f'<div style="{style_wrapper}">{html}</div>'
+                help_texts["help_texts"].update({"domains": mark_safe(html_wrapper)})
+
+            if obj.emails:
+                inner_text1 = "Open E-mail"
+                inner_text2 = "Copy e-mail"
+                inner_text3 = "Copy domain"
+                inner_text4 = "Open domain"
+                style_wrapper = "display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: center;"
+                id1 = "open-email"
+                id2 = "copy-email"
+                id3 = "copy-email-domain"
+                id4 = "open-email-domain"
+                html1 = f'<button id="{id1}" type="button" class="button">{inner_text1}</button>'
+                html2 = f'<button id="{id2}" type="button" class="button">{inner_text2}</button>'
+                html3 = f'<button id="{id3}" type="button" class="button">{inner_text3}</button>'
+                html4 = f'<button id="{id4}" type="button" class="button">{inner_text4}</button>'
+                html = " ".join([html1, html2, html3, html4])
+                html_wrapper = f'<div style="{style_wrapper}">{html}</div>'
+                help_texts["help_texts"].update({"emails": mark_safe(html_wrapper)})
+
+            if obj.social_medias:
+                inner_text1 = "Open Social Media"
+                id1 = "open-social-media"
+                html1 = f'<button id="{id1}" type="button" class="button">{inner_text1}</button>'
+                
+                inner_text2 = "Open link"
+                id2 = "open-social-media-link"
+                html2 = f'<button id="{id2}" type="button" class="button">{inner_text2}</button>'
+
+                html = " ".join([html1, html2])
+                html_wrapper = f'<div style="{style_wrapper}">{html}</div>'
+                help_texts["help_texts"].update({"social_medias": mark_safe(html_wrapper)})
                 
             if obj.last_post:
                 help_text = get_time_offset(obj.last_post)
@@ -703,39 +712,47 @@ class BusinessAdmin(admin.ModelAdmin):
         
         return mark_safe("<br style='margin-bottom: 4px;'/>".join(html))
     
-    @admin.display(description='email')
-    def email_(self, obj: models.Business):
-        html = []
-        
-        if obj.email:
-            color_status = "red" if has_string_in_list(["contab", "contador"], [obj.email]) else "unset"
-            html = f'<span title="{obj.email}" style="display: inline-block; white-space: nowrap; padding: 0 0 2px 0;margin: 0;max-width: 160px;text-overflow: ellipsis;overflow-x: hidden; color: {color_status}">{obj.email}</span>'
+    
+    @admin.display(description='urls')
+    def urls_(self, obj: models.Business):
+        domains = obj.domains.all()
+        if len(domains) > 0:
+            html_items = []
+            for domain in domains:
+                leng = 30
+                inner_text = domain.name[0:leng - 1] if len(domain.name) > leng else domain.name
+                if "www." in inner_text: inner_text = inner_text.replace("www.", "")
+                html1 = ""
+                if domain.is_banned:
+                    html1 = f'<a href="{domain.get_url()}" style="color: red;" target="_blank">{inner_text}</a>'
+                elif "ok" == domain.connection_status or None == domain.connection_status:
+                    html1 = f'<a href="{domain.get_url()}" target="_blank">{inner_text}</a>'
+                else:
+                    html1 = f'<a href="{domain.get_url()}" style="color: red;" target="_blank">{inner_text}</a>'
+
+                html_items.append(f"<span>{html1}</span>")
+            html = "<br>".join(html_items)
             return mark_safe(html)
         else:
             return None
         
-    @admin.display(description='phone')
-    def phone_(self, obj: models.Business):
-        if obj.cellphone or obj.telephone:
-            href = obj.get_whatsapp_link(False)
-            inner_text = obj.fphone()
-            whatsapp = ""
-            img = ""
-
-            if len(str(obj.cellphone)) in [9, 11, 13]:
-                img = f'<img style="height: 12px; display: inline-block; margin-right: 4px;" src="/static/img/phone-true.svg"'
-            elif len(str(obj.telephone)) in [8, 10, 12]:
-                img = f'<img style="height: 12px; display: inline-block; margin-right: 4px;" src="/static/img/telephone-true.svg"'
-
-            whatsapp = f'<a href="{href}" target="_blank"  style="font-size: 14px;">{inner_text}</a>'
-
-            html = f"{img} {whatsapp}"
+    @admin.display(description='emails')
+    def emails_(self, obj: models.Business):
+        emails = obj.emails.all()
+        if len(emails) > 0:
+            html_items = []
+            for email in emails:
+                contab_terms = ["contabilidade", "contador", "contabi"]
+                is_contab = has_substrings_in_strings(substrings=contab_terms, strings=email.address)
+                color_status = "red" if is_contab else "unset"
+                html1 = f'<span title="{email.address}" style="display: inline-block; white-space: nowrap; padding: 0 0 2px 0;margin: 0;max-width: 160px;text-overflow: ellipsis;overflow-x: hidden; color: {color_status};">{email.address}</span>'
+                html_items.append(html1)
+            html = "<br>".join(html_items)
             return mark_safe(html)
         else:
             return None
-    
-    
-    @admin.display(description='phone')
+        
+    @admin.display(description='phones')
     def phone_numbers_(self, obj: models.Business):
         phone_numbers = obj.phone_numbers.all()
         if len(phone_numbers) > 0:
@@ -830,6 +847,33 @@ class BusinessInline(admin.StackedInline):
                 
         return super().get_formset(request, obj, **kwargs)
             
+@admin.register(models.SocialMedia)
+class SocialMediaAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.Domain)
+class DomainAdmin(admin.ModelAdmin):
+    form = forms.DomainForm
+    
+
+@admin.register(models.Email)
+class EmailAdmin(admin.ModelAdmin):
+    search_fields = ["address"]
+
+class SubTagInline(admin.TabularInline):
+    model = models.SubTag
+    extra = 0
+    min_num = 1
+
+@admin.register(models.Tag)
+class TagAdmin(admin.ModelAdmin):
+    search_fields = ["title"]
+    inlines = [SubTagInline]
+
+@admin.register(models.SubTag)
+class SubTagAdmin(admin.ModelAdmin):
+    search_fields = ["title"]
+
 class QualifiedListFilter(admin.SimpleListFilter):
     # Human-readable title which will be displayed in the
     # right admin sidebar just above the filter options.
@@ -1203,19 +1247,25 @@ class TemplateAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         
         try:
-            business_contact = models.Business.objects.get(id=3756)
-            template = models.Template.objects.get(id=object_id)
-            extra_context["business_contact"] = business_contact
-            if template:
-                tpt = Template(boldify(template.message, True))
-                context = Context({'business_contact': business_contact})
-                rendered_content = tpt.render(context)
-                extra_context["template"] = rendered_content
+            business = models.Business.objects.get(id=18569)
+            print(business)
+            extra_context["business"] = business
+            if business.template:
+                context = Context({'business': business})
+                
+                template_message = Template(boldify(business.template.message, True))
+                rendered_template_message = template_message.render(context)
+                extra_context["template_message"] = rendered_template_message
+
+                template_subject = Template(boldify(business.template.subject, True))
+                rendered_template_subject = template_subject.render(context)
+                extra_context["template_subject"] = rendered_template_subject
             else:
-                extra_context["template"] = None
-        except Exception as e:
-            print(e)
-            extra_context["template"] = None
+                extra_context["template_message"] = None
+                extra_context["template_subject"] = None
+        except ObjectDoesNotExist:
+            extra_context["template_message"] = None
+            extra_context["template_subject"] = None
         
         return super().change_view(
             request,
@@ -1617,12 +1667,12 @@ class PostGeneratorAdmin(admin.ModelAdmin):
                         url_matches = re.findall("(?P<url>https?://[^\s]+)", post.phrase)
                         for url in url_matches:
                             image_extensions = [".jpg", ".jpeg", ".png", ".webp"]
-                            is_url_image = has_string_in_list(image_extensions, [url])
-                            if is_url_image: post.image1_url = url
+                            # is_url_image = has_string_in_list(image_extensions, [url])
+                            # if is_url_image: post.image1_url = url
                             
                             audio_extensions = [".mp3"]
-                            is_url_audio = has_string_in_list(audio_extensions, [url])
-                            if is_url_audio: post.audio_url = url
+                            # is_url_audio = has_string_in_list(audio_extensions, [url])
+                            # if is_url_audio: post.audio_url = url
                             
                             post.phrase = post.phrase.replace(url, "").strip()
                         
