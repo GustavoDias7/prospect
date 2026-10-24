@@ -10,7 +10,7 @@ from prospect.constants import BOLD_MAP, DDD
 from prospect.regex import EMAIL_PATTERN, PHONE_PATTERNS, MASKED_PHONE_PATTERNS
 import random
 from io import BytesIO
-import cairosvg
+# import cairosvg
 from moviepy.editor import VideoFileClip, AudioFileClip
 import numpy as np
 from moviepy.decorators import audio_video_fx
@@ -590,12 +590,13 @@ def generate_rectangle(
     </svg>'''
 
     # Convert SVG to PNG using cairosvg
-    png_bytes = cairosvg.svg2png(bytestring=svg.encode('utf-8'))
+    # png_bytes = cairosvg.svg2png(bytestring=svg.encode('utf-8'))
 
     # Load PNG into a Pillow Image
-    image = Image.open(BytesIO(png_bytes)).convert("RGBA")
+    # image = Image.open(BytesIO(png_bytes)).convert("RGBA")
     
-    return image
+    # return 
+    return None
 
 def save_cookies(driver: webdriver.Firefox, filename: str):
     # Get and store cookies after login

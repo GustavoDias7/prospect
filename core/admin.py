@@ -18,7 +18,7 @@ from prospect.utils import resize_image, crop_horizontal_image, text_to_image, g
 from prospect.regex import WEBSITE_PATTERN
 import os
 from django.conf import settings
-import cairosvg
+# import cairosvg
 import re
 from moviepy.editor import AudioFileClip, ImageClip
 from moviepy.audio.fx import audio_normalize, volumex
